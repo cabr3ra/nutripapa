@@ -1,0 +1,54 @@
+/*
+ * Selector de semana. Solo tokens de src/styles/tokens.css (paleta HARD).
+ * Flechas de contorno en carbón, zona táctil ≥ --touch-target-min.
+ */
+.week-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.week-picker__arrow {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.week-picker__arrow:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.week-picker__label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  text-align: center;
+  color: var(--color-text);
+}
+
+.week-picker__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+.week-picker__range {
+  font-size: var(--font-size-base);
+}

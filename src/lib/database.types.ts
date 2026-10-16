@@ -261,7 +261,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      duplicate_weekly_sheet: {
+        Args: { source_id: string; target_start: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

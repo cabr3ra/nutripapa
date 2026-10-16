@@ -1,0 +1,214 @@
+/*
+ * Historial de tablas. Solo tokens de src/styles/tokens.css (paleta HARD).
+ * Texto normal siempre en --color-text sobre crema o beige (AA).
+ * Botones primarios en --color-accent con texto grande y negrita
+ * (22px bold ≥ 18.66px: umbral 3:1, contraste 3.2:1); el resto, contorno carbón.
+ */
+.history {
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Margen lateral de 16px en móvil */
+  padding: var(--space-6) var(--space-4);
+  background-color: var(--color-bg);
+}
+
+.history__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  min-width: 0;
+  max-width: 40rem;
+}
+
+.history__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+}
+
+.history__back {
+  display: inline-flex;
+  align-items: center;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  padding: 0 var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  text-decoration: underline;
+  border-radius: var(--radius-sm);
+}
+
+.history__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+/* Botón base: contorno carbón (secundario) */
+.history__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-5);
+  font-family: inherit;
+  /* Siempre texto grande y en negrita (también vale sobre terracota) */
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  text-decoration: none;
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+/* Primario: fondo terracota, texto carbón grande y negrita */
+.history__button--primary {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.history__button:disabled {
+  cursor: not-allowed;
+  /* Sin bajar el contraste: se distingue por el borde discontinuo y el texto */
+  border-style: dashed;
+  border-color: var(--color-text);
+}
+
+.history__back:focus-visible,
+.history__button:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.history__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* Paneles integrados (nueva tabla, duplicar, confirmar borrado) */
+.history__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background-color: var(--color-bg);
+  /* Franja salvia decorativa (sin texto encima) */
+  border-left: var(--space-2) solid var(--color-primary);
+  border-radius: var(--radius-md);
+}
+
+.history__item > .history__panel {
+  margin-top: var(--space-4);
+}
+
+.history__panel-text,
+.history__undo-text {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+/* Barra "Tabla eliminada · Deshacer": dentro del flujo, nunca flotante */
+.history__undo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border-left: var(--space-2) solid var(--color-accent);
+  border-radius: var(--radius-md);
+}
+
+.history__undo .history__message {
+  flex-basis: 100%;
+}
+
+.history__status {
+  margin: 0;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+}
+
+/* Mensaje de error en línea: el acento solo como franja */
+.history__message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border-left: var(--space-2) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.history__message p {
+  margin: 0;
+}
+
+.history__week {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.history__week-title {
+  margin: 0;
+  padding-bottom: var(--space-2);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  /* Subrayado salvia decorativo */
+  border-bottom: 3px solid var(--color-primary);
+}
+
+.history__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history__item {
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+}
+
+.history__menu {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.history__hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+@media (min-width: 48rem) {
+  .history__item {
+    padding: var(--space-5);
+  }
+}

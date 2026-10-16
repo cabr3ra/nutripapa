@@ -1,0 +1,164 @@
+/*
+ * Cuadrícula semanal.
+ * Solo tokens de src/styles/tokens.css (paleta HARD).
+ * Contraste: todo el texto va en --color-text (carbón) sobre crema o beige
+ * (AA holgado). El salvia solo aparece como franja decorativa bajo las
+ * cabeceras y en el día activo de la tira (texto grande y en negrita, 3:1).
+ * Nunca scroll horizontal: tabla al 100 % con table-layout fixed y
+ * overflow-wrap: anywhere en las celdas.
+ */
+.week-grid {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  color: var(--color-text);
+}
+
+/* Oculto a la vista, disponible para lectores de pantalla */
+.week-grid__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.week-grid__strip {
+  margin-bottom: var(--space-4);
+}
+
+.week-grid__table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-surface);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.week-grid__head,
+.week-grid__row-label,
+.week-grid__cell,
+.week-grid__corner {
+  box-sizing: border-box;
+  min-width: 0;
+  /* En tablas, height se comporta como alto mínimo */
+  height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--color-surface);
+}
+
+/* Columna de etiquetas (la primera celda de cada fila) */
+.week-grid__corner,
+.week-grid__row-label {
+  width: 7.5rem;
+}
+
+.week-grid__corner {
+  background-color: var(--color-surface);
+}
+
+/* Cabecera de día: beige con franja salvia decorativa abajo */
+.week-grid__head {
+  font-weight: var(--font-weight-bold);
+  background-color: var(--color-surface);
+  border-bottom: var(--space-1) solid var(--color-primary);
+}
+
+.week-grid__head-name,
+.week-grid__head-date {
+  display: block;
+}
+
+.week-grid__head-date {
+  font-weight: var(--font-weight-regular);
+}
+
+/* Hoy: subrayado grueso + etiqueta de texto (no depende del color) */
+.week-grid__head--today .week-grid__head-name {
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+}
+
+.week-grid__today {
+  display: inline-block;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-full);
+}
+
+.week-grid__row-label {
+  font-weight: var(--font-weight-bold);
+  background-color: var(--color-surface);
+}
+
+.week-grid__cell {
+  background-color: var(--color-bg);
+}
+
+.week-grid__entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.week-grid__entries li + li {
+  margin-top: var(--space-1);
+}
+
+/* Separación entre comidas y filas de seguimiento */
+.week-grid__tracking--first > * {
+  border-top: var(--space-1) solid var(--color-surface);
+}
+
+/* Móvil: solo la columna del día elegido */
+@media not all and (min-width: 48rem) {
+  .week-grid__day:not(.week-grid__day--selected) {
+    display: none;
+  }
+}
+
+/* PC/tablet: 7 columnas, sin tira de días */
+@media (min-width: 48rem) {
+  .week-grid__strip {
+    display: none;
+  }
+
+  .week-grid__table {
+    font-size: var(--font-size-sm);
+  }
+
+  .week-grid__head,
+  .week-grid__row-label,
+  .week-grid__cell,
+  .week-grid__corner {
+    padding: var(--space-2);
+  }
+
+  .week-grid__corner,
+  .week-grid__row-label {
+    width: 8rem;
+  }
+
+  .week-grid__head + .week-grid__head,
+  .week-grid__cell + .week-grid__cell {
+    border-left: 1px solid var(--color-surface);
+  }
+}
