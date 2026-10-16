@@ -29,5 +29,6 @@ Owner: `agent` (loop-runnable) · `human` (skipped by the loop)
 - [x] T013 [agent] [status:done] Verificar que `pnpm dev` muestra el fondo `#F5EFE6` y Nunito
       └─ Chrome en localhost:5173: body rgb(245,239,230) = #F5EFE6, Nunito 400/800 cargada, h1 correcto, sin scroll horizontal.
 - [ ] T014 [human] [status:todo] Verificar que `pnpm preview` es instalable como PWA en Chrome
-- [ ] T015 [agent] [status:in_progress] Verificar que un push dispara el CI y que no bloquea aunque falle
+- [x] T015 [agent] [status:done] Verificar que un push dispara el CI y que no bloquea aunque falle
+      └─ Push 916a357 lanzó CI run 38955370626 (success). No bloqueo: continue-on-error en lint/test/build y main sin protección; no se forzó un fallo real.
 - [ ] T016 [human] [status:todo] Decidir los iconos definitivos y el nombre visible

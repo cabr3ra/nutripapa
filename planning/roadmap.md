@@ -5,8 +5,8 @@ table first; nothing else in this repo should be needed to get oriented.
 
 | ID  | Plan | Status | Depends on | Stage | Priority |
 |-----|------|--------|------------|-------|----------|
-| 001 | project-setup | todo | — | looping | 1 |
-| 002 | supabase-tooling | todo | — | tasks_ready | 2 |
+| 001 | project-setup | done | — | — | 1 |
+| 002 | supabase-tooling | blocked | — | looping | 2 |
 | 003 | database-schema | todo | 001, 002 | requirements | 3 |
 | 004 | access-code | todo | 003 | requirements | 4 |
 | 005 | cloudflare-deploy | todo | 001 | requirements | 5 |
