@@ -32,6 +32,35 @@ Antes de dar un cambio por bueno: `pnpm lint`, `pnpm test` y `pnpm build`.
 
 Las variables de entorno van en `.env.local`, que no se sube al repositorio. Nunca se suben claves secretas, tokens ni contraseñas.
 
+## Despliegue
+
+La app se publica en Cloudflare Pages (plan gratuito) con la integración de Git:
+
+- **Producción:** cada push a `main` se publica en la URL `*.pages.dev`.
+- **Vistas previas:** cada push a cualquier otra rama genera su propia URL de preview.
+
+Ajustes del proyecto de Pages (Settings → Build):
+
+| Ajuste                  | Valor                                       |
+| ----------------------- | ------------------------------------------- |
+| Rama de producción      | `main`                                      |
+| Comando de build        | `pnpm build`                                |
+| Directorio de salida    | `dist`                                      |
+| Directorio raíz         | `/` (raíz del repo)                         |
+| Variable `NODE_VERSION` | `24` (respaldo; Pages también lee `.nvmrc`) |
+
+pnpm se detecta por `pnpm-lock.yaml`; la versión queda fijada en `packageManager` de `package.json`.
+
+Variables de entorno (Settings → Variables), en **Producción y Preview**:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_PUBLISHABLE_KEY` (la clave publicable, `sb_publishable_…`)
+- `VITE_ACCESS_EMAIL`
+
+Nunca se ponen en Cloudflare la clave `sb_secret_…`, el access token de Supabase ni la contraseña de la base de datos.
+
+Rutas: no hace falta `_redirects`. Sin `404.html` en la raíz, Pages trata la app como SPA y sirve `index.html` en cualquier ruta.
+
 ## Documentación
 
 - `AGENTS.md`: resumen del proyecto y normas de trabajo

@@ -20,7 +20,8 @@ Owner: `agent` (loop-runnable) · `human` (skipped by the loop)
 - [x] T008 [agent] [status:done] Añadir `@supabase/supabase-js` y escribir `scripts/check-anon-access.mjs`
       └─ @supabase/supabase-js ^2.118.0; scripts/check-anon-access.mjs + script `pnpm check:anon`; eslint cubre scripts/*.mjs (globals node). Sin ejecutar (falta .env.local, T009).
 - [ ] T009 [human] [status:todo] Rellenar `.env.local` con `VITE_SUPABASE_URL` y la clave publicable
-- [ ] T010 [agent] [status:todo] Ejecutar `scripts/check-anon-access.mjs` y comprobar que todo acceso anónimo es denegado
+- [x] T010 [agent] [status:done] Ejecutar `scripts/check-anon-access.mjs` y comprobar que todo acceso anónimo es denegado
+      └─ pnpm check:anon: 13/13 OK (42501 en select/insert de las 5 tablas; bucket: listar vacío, subir rechazado por RLS); exit 0.
 - [x] T011 [agent] [status:done] Verificar vía MCP (solo lectura) que las 5 tablas existen con RLS activado
       └─ MCP list_tables: 5 tablas con rls_enabled=true y 0 filas; pg_policies: 4 políticas en cada una.
 - [x] T012 [agent] [status:done] Comprobar `pnpm lint`, `pnpm test` y `pnpm build` en verde
