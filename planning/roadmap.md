@@ -7,9 +7,9 @@ table first; nothing else in this repo should be needed to get oriented.
 |-----|------|--------|------------|-------|----------|
 | 001 | project-setup | done | — | — | 1 |
 | 002 | supabase-tooling | done | — | — | 2 |
-| 003 | database-schema | todo | 001, 002 | requirements | 3 |
+| 003 | database-schema | todo | 001, 002 | tasks_ready | 3 |
 | 004 | access-code | todo | 003 | requirements | 4 |
-| 005 | cloudflare-deploy | todo | 001 | requirements | 5 |
+| 005 | cloudflare-deploy | todo | 001 | tasks_ready | 5 |
 | 006 | weekly-table | todo | 004 | requirements | 6 |
 | 007 | meal-entry | todo | 006 | requirements | 7 |
 | 008 | drag-and-drop | todo | 007 | requirements | 8 |

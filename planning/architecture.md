@@ -28,6 +28,10 @@ PWA estática (React SPA) servida por Cloudflare Pages. Habla directamente con S
 | Supabase CLI | Global vía Scoop; auth por `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD` (env de usuario) | Sin login interactivo; no depende de 001 (002) |
 | Supabase MCP | Endpoint alojado en `.mcp.json`, `project_ref=jojumjyqxpqzaslbxrso`, `read_only=true`, OAuth | Inspección segura; escrituras solo por migraciones (002) |
 | Aplicar migraciones | Siempre `supabase db push` | Historial versionado (002) |
+| Valores cerrados en BD | `text` + `check (… in (…))`, no enums de Postgres | Más fácil de ampliar con migraciones no destructivas (003) |
+| Verificar RLS | `supabase/tests/rls_check.sql` vía `supabase db query --linked`, un bloque `DO` que acaba siempre en `raise exception` (rollback) | Probar RLS en remoto sin dejar datos (003) |
+| Tipos de BD | `src/lib/database.types.ts` generado con `supabase gen types typescript --linked` | Tipado de `supabase-js` desde el esquema real (003) |
+| Fallback SPA | Comportamiento por defecto de Pages (sin `404.html` → `index.html`); sin `_redirects` | Cloudflare ya lo hace; `_redirects` sobraba (005) |
 
 ### Data model
 

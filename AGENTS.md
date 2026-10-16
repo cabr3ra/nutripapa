@@ -25,6 +25,8 @@
 - Coste 0: solo planes gratuitos. Sin servicios externos de errores; el estado de sincronización se muestra en la app.
 - Node 24 LTS. PWA con `vite-plugin-pwa` (`generateSW`). Colores solo vía tokens de `src/styles/tokens.css`. Código por feature en `src/features/<feature>/`.
 - Supabase: migraciones solo con `supabase db push` (CLI global, auth por env vars del usuario). El MCP de Supabase (`.mcp.json`) es de solo lectura: úsalo para inspeccionar, nunca para escribir.
+- BD: valores cerrados como `text` + `check`, no enums. RLS se verifica con `supabase db query --linked -f supabase/tests/rls_check.sql` (siempre con rollback). Tipos en `src/lib/database.types.ts` (`supabase gen types typescript --linked`).
+- Cloudflare Pages: sin `_redirects` ni `404.html` en la raíz (Pages sirve la SPA por defecto).
 - Detalle y motivos: `planning/architecture.md`.
 
 ## Style
