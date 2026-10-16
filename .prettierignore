@@ -6,3 +6,5 @@ pnpm-lock.yaml
 planning/
 .specloop/
 IDEA.md
+# Generado por supabase gen types
+src/lib/database.types.ts
