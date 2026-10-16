@@ -1,0 +1,53 @@
+# CI informativo: ejecuta lint, test y build en cada push a main y en cada PR.
+# Ningún paso bloquea (continue-on-error), el resultado solo sirve para informar.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Solo lectura del repositorio; el workflow no necesita más permisos.
+permissions:
+  contents: read
+
+# Cancela ejecuciones anteriores de la misma rama/PR cuando llega una nueva.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, test y build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v7
+
+      # pnpm/action-setup no instala Node; se combina con setup-node.
+      # Sin "packageManager" en package.json, se fija la versión mayor de pnpm aquí.
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Instalar Node (versión de .nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+        continue-on-error: true
+
+      - name: Test
+        run: pnpm test
+        continue-on-error: true
+
+      - name: Build
+        run: pnpm build
+        continue-on-error: true

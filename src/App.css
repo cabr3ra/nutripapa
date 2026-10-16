@@ -1,0 +1,50 @@
+/*
+ * Estilos de la pantalla de bienvenida.
+ * Solo se usan tokens de src/styles/tokens.css (paleta HARD).
+ * Texto siempre en --color-text: es el único que cumple WCAG AA sobre crema y beige.
+ */
+.welcome {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Margen lateral de 16px en móvil */
+  padding: var(--space-6) var(--space-4);
+}
+
+.welcome__card {
+  width: 100%;
+  max-width: var(--content-max-width);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  background-color: var(--color-surface);
+  /* Franja salvia decorativa (no lleva texto, no afecta al contraste) */
+  border-top: var(--space-2) solid var(--color-primary);
+  border-radius: var(--radius-lg);
+}
+
+.welcome__title {
+  font-size: var(--font-size-xl);
+  color: var(--color-text);
+  /* Evita desbordes horizontales en pantallas estrechas */
+  overflow-wrap: anywhere;
+}
+
+.welcome__subtitle {
+  max-width: 36rem;
+  margin: var(--space-5) auto 0;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+}
+
+/* En PC el título gana tamaño y la tarjeta más aire */
+@media (min-width: 48rem) {
+  .welcome__card {
+    padding: var(--space-8) var(--space-7);
+  }
+
+  .welcome__title {
+    font-size: var(--font-size-2xl);
+  }
+}
