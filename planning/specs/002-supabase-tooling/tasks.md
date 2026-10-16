@@ -12,15 +12,16 @@ Owner: `agent` (loop-runnable) · `human` (skipped by the loop)
 - [x] T005 [agent] [status:done] Ejecutar `supabase init` (crea `supabase/config.toml` y `supabase/migrations/`)
       └─ supabase/config.toml, supabase/.gitignore; la CLI no crea migrations/, añadido supabase/migrations/.gitkeep.
 - [ ] T006 [agent] [status:blocked] Ejecutar `supabase link --project-ref jojumjyqxpqzaslbxrso` sin pasos interactivos
-      └─ SUPABASE_ACCESS_TOKEN no es un access token personal (sbp_…): parece una clave secret del proyecto (sb_s…). La CLI responde InvalidAccessTokenError.
+      └─ 2.º intento: SUPABASE_ACCESS_TOKEN sigue sin ser sbp_ (41 car., sb_s…; misma longitud que la clave secret del chat). InvalidAccessTokenError.
 - [x] T007 [agent] [status:done] Registrar el MCP de Supabase en `.mcp.json` (HTTP, `project_ref=jojumjyqxpqzaslbxrso` + `read_only=true`)
       └─ .mcp.json: servidor supabase type http, url mcp.supabase.com/mcp?project_ref=jojumjyqxpqzaslbxrso&read_only=true; sin secretos (OAuth).
-- [ ] T008 [human] [status:todo] Autenticar el MCP desde `/mcp` en Claude Code
+- [x] T008 [human] [status:done] Autenticar el MCP desde `/mcp` en Claude Code
+      └─ OAuth completado por el usuario (2026-10-16); scopes solo de lectura, limitado a jojumjyqxpqzaslbxrso.
 - [x] T009 [agent] [status:done] Añadir a `AGENTS.md` la nota sobre `supabase db push` y el MCP de solo lectura
       └─ Ya estaba: AGENTS.md (Stack & conventions) recoge `supabase db push` y el MCP de solo lectura; sin cambios.
 - [ ] T010 [agent] [status:blocked] Verificar que la CLI lista los proyectos usando el token de entorno, sin login interactivo
-      └─ Misma causa que T006: SUPABASE_ACCESS_TOKEN no tiene formato sbp_, la CLI lo rechaza (InvalidAccessTokenError).
-- [ ] T011 [agent] [status:blocked] Verificar que el MCP lista las tablas (lectura) y rechaza una escritura
-      └─ El MCP de Supabase no está cargado ni autenticado en esta sesión: depende de T008 [human] (reiniciar Claude Code y autenticar en /mcp).
+      └─ 2.º intento: `supabase projects list` → InvalidAccessTokenError, mismo token sb_s….
+- [x] T011 [agent] [status:done] Verificar que el MCP lista las tablas (lectura) y rechaza una escritura
+      └─ list_tables(public) → [] (sin migraciones aún). Sesión MCP: current_user=supabase_read_only_user, transaction_read_only=on. Escritura no probada (el permiso de Claude Code bloqueó el CREATE de prueba); aceptado por el usuario como evidencia suficiente.
 - [x] T012 [agent] [status:done] Verificar con `git grep` que ni el token ni la contraseña están en el repo
       └─ git grep -F (incl. no rastreados) y git log -S con los valores reales de ambas variables: 0 coincidencias en árbol e historial.
