@@ -1,19 +1,27 @@
-import './App.css'
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router'
+import { AuthProvider } from './features/auth/AuthProvider'
+import { RequireAuth } from './features/auth/RequireAuth'
+import { HomeScreen } from './features/home/HomeScreen'
+import { SettingsScreen } from './features/settings/SettingsScreen'
 
-// Pantalla de bienvenida provisional: aún sin funcionalidades,
-// solo el título de la app con la paleta y la fuente ya aplicadas
+// Todas las rutas cuelgan de RequireAuth: sin sesión se pide el código en la misma URL.
+// Cualquier ruta desconocida vuelve a la pantalla principal (también protegida).
+const router = createBrowserRouter([
+  {
+    element: <RequireAuth />,
+    children: [
+      { path: '/', element: <HomeScreen /> },
+      { path: '/ajustes', element: <SettingsScreen /> },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+])
+
 function App() {
   return (
-    <main className="welcome">
-      <section className="welcome__card" aria-labelledby="welcome-title">
-        <h1 id="welcome-title" className="welcome__title">
-          CONTROL SEMANAL de COMIDAS
-        </h1>
-        <p className="welcome__subtitle">
-          Hola, aquí apuntarás lo que comes cada semana. Muy pronto estará todo listo para ti.
-        </p>
-      </section>
-    </main>
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
   )
 }
 

@@ -1,9 +1,10 @@
 /*
- * Estilos de la pantalla de bienvenida.
+ * Estilos de la pantalla principal provisional (bienvenida).
  * Solo se usan tokens de src/styles/tokens.css (paleta HARD).
  * Texto siempre en --color-text: es el único que cumple WCAG AA sobre crema y beige.
  */
 .welcome {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11,6 +12,8 @@
   min-height: 100dvh;
   /* Margen lateral de 16px en móvil */
   padding: var(--space-6) var(--space-4);
+  /* Hueco arriba para que el enlace de ajustes nunca tape la tarjeta */
+  padding-top: var(--space-8);
 }
 
 .welcome__card {
@@ -36,6 +39,33 @@
   margin: var(--space-5) auto 0;
   font-size: var(--font-size-base);
   color: var(--color-text);
+}
+
+/* Enlace discreto a ajustes en la esquina superior derecha */
+.welcome__nav {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+
+.welcome__settings-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Pequeño a la vista, pero con zona táctil cómoda */
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  padding: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  text-decoration: underline;
+  border-radius: var(--radius-sm);
+}
+
+.welcome__settings-link:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 2px;
 }
 
 /* En PC el título gana tamaño y la tarjeta más aire */

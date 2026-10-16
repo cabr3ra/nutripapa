@@ -1,0 +1,132 @@
+/*
+ * Pantalla de código de acceso.
+ * Solo tokens de src/styles/tokens.css (paleta HARD).
+ * Contraste: el texto normal va siempre en --color-text sobre crema o beige (AA).
+ * El botón usa --color-accent con texto grande y en negrita (≥ 18.66px bold, umbral 3:1).
+ */
+.access {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Margen lateral de 16px en móvil */
+  padding: var(--space-6) var(--space-4);
+  background-color: var(--color-bg);
+}
+
+.access__card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 30rem;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  background-color: var(--color-surface);
+  /* Franja salvia decorativa (sin texto encima) */
+  border-top: var(--space-2) solid var(--color-primary);
+  border-radius: var(--radius-lg);
+}
+
+.access__title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.access__greeting {
+  margin: var(--space-4) 0 0;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+}
+
+.access__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  text-align: left;
+}
+
+.access__label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.access__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--touch-target-min);
+  padding: var(--space-3) var(--space-4);
+  font-family: inherit;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-md);
+}
+
+.access__input:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+/*
+ * Campo con error: el borde sigue en carbón (contraste 3:1 del control) y
+ * se añade un halo terracota decorativo; el mensaje en texto es lo que informa.
+ */
+.access__input[aria-invalid='true'] {
+  border-width: 3px;
+  box-shadow: 0 0 0 3px var(--color-accent);
+}
+
+/* Mensaje en línea; vacío no ocupa sitio */
+.access__message:empty {
+  display: none;
+}
+
+.access__message {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  /* El acento solo como franja, nunca de fondo bajo texto normal */
+  border-left: var(--space-2) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+.access__button {
+  width: 100%;
+  min-height: var(--touch-target-min);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  font-family: inherit;
+  /* 22px en negrita: texto grande, contraste 3:1 suficiente sobre terracota */
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.access__button:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.access__button:disabled {
+  cursor: progress;
+  /* Se distingue por el texto "Entrando…"; sin cambiar colores */
+  border: 2px dashed var(--color-text);
+}
+
+@media (min-width: 48rem) {
+  .access__card {
+    padding: var(--space-7) var(--space-6);
+  }
+}

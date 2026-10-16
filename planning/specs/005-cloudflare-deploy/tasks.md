@@ -11,8 +11,12 @@ Owner: `agent` (loop-runnable) · `human` (skipped by the loop)
       └─ lint OK, test 2/2, build OK; push 4bd73c8..9aefb8c a origin/main (0 claves en el diff).
 - [ ] T004 [human] [status:todo] Crear la cuenta de Cloudflare, autorizar GitHub y crear el proyecto de Pages (`main`, `pnpm build`, `dist`, `NODE_VERSION=24`)
 - [ ] T005 [human] [status:todo] Poner `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` y `VITE_ACCESS_EMAIL` en Producción y Preview
-- [ ] T006 [agent] [status:todo] Verificar que un push a `main` publica en la URL `*.pages.dev` por HTTPS
-- [ ] T007 [agent] [status:todo] Crear una rama de prueba, comprobar que su URL de preview es distinta y borrar la rama
-- [ ] T008 [agent] [status:todo] Recargar una ruta interna en producción y comprobar que no da 404
-- [ ] T009 [agent] [status:todo] Comprobar que el bundle publicado contiene la clave publicable y ningún `sb_secret_`
+- [ ] T006 [agent] [status:blocked] Verificar que un push a `main` publica en la URL `*.pages.dev` por HTTPS
+      └─ Sin proyecto de Pages: nutripapa.pages.dev no resuelve (curl exit 6). Espera T004/T005 [human].
+- [ ] T007 [agent] [status:blocked] Crear una rama de prueba, comprobar que su URL de preview es distinta y borrar la rama
+      └─ Sin proyecto de Pages: nutripapa.pages.dev no resuelve (curl exit 6). Espera T004/T005 [human].
+- [ ] T008 [agent] [status:blocked] Recargar una ruta interna en producción y comprobar que no da 404
+      └─ Sin proyecto de Pages: nutripapa.pages.dev no resuelve (curl exit 6). Espera T004/T005 [human].
+- [ ] T009 [agent] [status:blocked] Comprobar que el bundle publicado contiene la clave publicable y ningún `sb_secret_`
+      └─ Sin proyecto de Pages: nutripapa.pages.dev no resuelve (curl exit 6). Espera T004/T005 [human].
 - [ ] T010 [human] [status:todo] Instalar la app desde Chrome en Android

@@ -17,12 +17,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "icons": "node scripts/generate-icons.mjs",
-    "check:anon": "node scripts/check-anon-access.mjs"
+    "check:anon": "node scripts/check-anon-access.mjs",
+    "check:signup": "node scripts/check-signup-disabled.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-router": "^8.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
