@@ -28,6 +28,7 @@
 - BD: valores cerrados como `text` + `check`, no enums. RLS se verifica con `supabase db query --linked -f supabase/tests/rls_check.sql` (siempre con rollback). Tipos en `src/lib/database.types.ts` (`supabase gen types typescript --linked`).
 - Cloudflare Pages: sin `_redirects` ni `404.html` en la raíz (Pages sirve la SPA por defecto).
 - Auth: un único cliente en `src/lib/supabase.ts`; rutas con `react-router` envueltas en `RequireAuth`; `signOut({ scope: 'local' })`. Nunca probar `signUp` real contra producción: usar `pnpm check:signup`.
+- Datos: funciones en `src/features/<feature>/api.ts` (sin librería de fetching hasta 010); operaciones de varias filas como RPC `security invoker`. Fechas como `YYYY-MM-DD` locales, sin librería. Breakpoint móvil `48rem`.
 - Detalle y motivos: `planning/architecture.md`.
 
 ## Style

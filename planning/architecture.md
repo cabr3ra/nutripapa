@@ -34,6 +34,10 @@ PWA estática (React SPA) servida por Cloudflare Pages. Habla directamente con S
 | Fallback SPA | Comportamiento por defecto de Pages (sin `404.html` → `index.html`); sin `_redirects` | Cloudflare ya lo hace; `_redirects` sobraba (005) |
 | Rutas | `react-router` (modo librería, `createBrowserRouter`); `RequireAuth` envuelve todas las rutas | Estándar en SPA React; rutas reales para 005/006+ (004) |
 | Cerrar sesión | `signOut({ scope: 'local' })` | Cerrar en un dispositivo no saca a los demás (004) |
+| Acceso a datos | Funciones en `src/features/<feature>/api.ts` sobre el cliente único; sin librería de fetching/caché hasta 010 | 010 decidirá la capa offline sin reescribir pantallas (006) |
+| Operaciones de varias filas | Funciones Postgres `security invoker`, `search_path = ''`, `execute` solo `authenticated`, llamadas con `rpc` | Atómicas y sujetas a RLS (006) |
+| Fechas | Texto `YYYY-MM-DD` en hora local, aritmética de días, `Intl` para textos; sin librería | Sin desfases por zona/cambio de hora (006) |
+| Breakpoint móvil | `48rem`: por debajo un día + tira de días; por encima 7 columnas | Diseño de 006 |
 | Comprobar registro desactivado | `GET /auth/v1/settings` → `disable_signup: true` (`pnpm check:signup`) | Verificar sin crear usuarios en producción (004) |
 
 ### Data model
