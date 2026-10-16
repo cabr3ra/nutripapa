@@ -27,6 +27,7 @@
 - Supabase: migraciones solo con `supabase db push` (CLI global, auth por env vars del usuario). El MCP de Supabase (`.mcp.json`) es de solo lectura: úsalo para inspeccionar, nunca para escribir.
 - BD: valores cerrados como `text` + `check`, no enums. RLS se verifica con `supabase db query --linked -f supabase/tests/rls_check.sql` (siempre con rollback). Tipos en `src/lib/database.types.ts` (`supabase gen types typescript --linked`).
 - Cloudflare Pages: sin `_redirects` ni `404.html` en la raíz (Pages sirve la SPA por defecto).
+- Auth: un único cliente en `src/lib/supabase.ts`; rutas con `react-router` envueltas en `RequireAuth`; `signOut({ scope: 'local' })`. Nunca probar `signUp` real contra producción: usar `pnpm check:signup`.
 - Detalle y motivos: `planning/architecture.md`.
 
 ## Style

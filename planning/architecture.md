@@ -32,6 +32,9 @@ PWA estática (React SPA) servida por Cloudflare Pages. Habla directamente con S
 | Verificar RLS | `supabase/tests/rls_check.sql` vía `supabase db query --linked`, un bloque `DO` que acaba siempre en `raise exception` (rollback) | Probar RLS en remoto sin dejar datos (003) |
 | Tipos de BD | `src/lib/database.types.ts` generado con `supabase gen types typescript --linked` | Tipado de `supabase-js` desde el esquema real (003) |
 | Fallback SPA | Comportamiento por defecto de Pages (sin `404.html` → `index.html`); sin `_redirects` | Cloudflare ya lo hace; `_redirects` sobraba (005) |
+| Rutas | `react-router` (modo librería, `createBrowserRouter`); `RequireAuth` envuelve todas las rutas | Estándar en SPA React; rutas reales para 005/006+ (004) |
+| Cerrar sesión | `signOut({ scope: 'local' })` | Cerrar en un dispositivo no saca a los demás (004) |
+| Comprobar registro desactivado | `GET /auth/v1/settings` → `disable_signup: true` (`pnpm check:signup`) | Verificar sin crear usuarios en producción (004) |
 
 ### Data model
 
