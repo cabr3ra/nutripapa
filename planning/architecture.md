@@ -41,6 +41,12 @@ PWA estática (React SPA) servida por Cloudflare Pages. Habla directamente con S
 | Componentes compartidos | `src/components/` (p.ej. `Stepper`, `UnitPicker`) | Reutilizados por varias features (007, 009) |
 | Paneles de edición | Fila integrada en la tabla, justo bajo la fila tocada, a todo el ancho (móvil y PC); uno abierto a la vez | Sin modales (HARD) y sin estrechar la tabla de 7 columnas (007) |
 | Guardado del seguimiento diario | Automático tras 600 ms sin cambios, `upsert` por `(sheet_id, day_of_week)` | Menos toques para el padre (009) |
+| Orden en celdas | `position` dispersa (paso 1024, punto medio, renumerar solo si no hay hueco) | Mover una comida actualiza una sola fila; encaja con la sync de 010 (008) |
+| Arrastrar | `@dnd-kit/core` + `@dnd-kit/sortable`; táctil 250 ms / 5 px; siempre con alternativa "Mover a…" | WCAG 2.5.7 (008) |
+| Offline | Dexie (IndexedDB) como fuente de verdad local + `useLiveQuery`; outbox con upsert por `id`, backoff con jitter; ids `crypto.randomUUID()` en cliente | Funciona sin conexión y sincroniza sola (010) |
+| Conflictos | Última escritura por fila según `updated_at` del cliente, aplicada en servidor por trigger; descarga por `server_updated_at` (puesto por el servidor) | Sin depender de relojes para el cursor (010) |
+| RPC tras 010 | La app deja de usar `save_meal_entry` y `duplicate_weekly_sheet` (lógica en cliente sobre Dexie); siguen en BD | Las RPC no funcionan sin conexión (010) |
+| PDF | `@react-pdf/renderer` cargado bajo demanda; Nunito TTF en `public/fonts/`; flujo "Preparar PDF" → "Compartir"/"Descargar" | Gesto de usuario reciente para Web Share (011) |
 | Comprobar registro desactivado | `GET /auth/v1/settings` → `disable_signup: true` (`pnpm check:signup`) | Verificar sin crear usuarios en producción (004) |
 
 ### Data model
