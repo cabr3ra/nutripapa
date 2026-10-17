@@ -182,6 +182,65 @@
   margin: 0;
 }
 
+/* "Mover a…": selector en línea (nunca ventana), mismo fondo que "Corregir nombre" */
+.meal-panel__move,
+.meal-panel__move-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.meal-panel__move {
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  border-radius: var(--radius-md);
+}
+
+.meal-panel__move-title {
+  margin: 0;
+  line-height: var(--line-height-tight);
+}
+
+/* Días L–D: si no caben los 7 a 48px (móvil estrecho), pasan a otra línea */
+.meal-panel__move-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Como la tira de días: carbón en negrita y grande; el elegido, salvia + borde grueso */
+.meal-panel__day {
+  box-sizing: border-box;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.meal-panel__day[aria-pressed='true'] {
+  background-color: var(--color-primary);
+  border-width: 4px;
+}
+
+.meal-panel__day:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.meal-panel__day:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
 /* Barra "Comida quitada · Deshacer": dentro del flujo, nunca flotante */
 .meal-undo {
   display: flex;

@@ -1,7 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DailyLog, MealEntryWithFood, SheetDetail, WeeklySheet } from './api'
+import type { MoveTarget } from '../meals/api'
+import { stripDayDropId } from '../meals/dnd/ids'
+import { resolveDrop } from '../meals/dnd/resolveDrop'
 
 // El cliente real de Supabase exige variables de entorno: aquí no hace falta
 vi.mock('../../lib/supabase', () => ({ supabase: {} }))
@@ -27,6 +31,36 @@ vi.mock('../meals/api', async (importOriginal) => {
     saveMealEntry: vi.fn(),
     softDeleteEntry: vi.fn(),
     restoreEntry: vi.fn(),
+    moveEntry: vi.fn(),
+    undoMove: vi.fn(),
+  }
+})
+
+// Arrastre: el arrastre real no se puede simular en jsdom. El provider simulado
+// guarda el onMove que recibe (para llamarlo como si se soltara una comida) y
+// sigue pintando un DndContext real para que la tabla arrastrable funcione.
+const dnd = vi.hoisted(() => ({
+  onMove: null as
+    | null
+    | ((
+        entry: import('./api').MealEntryWithFood,
+        target: import('../meals/api').MoveTarget,
+        cellEntries: import('./api').MealEntryWithFood[],
+      ) => void),
+}))
+vi.mock('../meals/dnd/MealDndProvider', async () => {
+  const { DndContext } = await import('@dnd-kit/core')
+  return {
+    MealDndProvider: ({
+      onMove,
+      children,
+    }: {
+      onMove: NonNullable<typeof dnd.onMove>
+      children: ReactNode
+    }) => {
+      dnd.onMove = onMove
+      return <DndContext>{children}</DndContext>
+    },
   }
 })
 
@@ -37,7 +71,15 @@ vi.mock('../daily-tracking/api', async (importOriginal) => {
 })
 
 import { saveDailyLog } from '../daily-tracking/api'
-import { getFoodUsage, listFoods, restoreEntry, saveMealEntry, softDeleteEntry } from '../meals/api'
+import {
+  getFoodUsage,
+  listFoods,
+  moveEntry,
+  restoreEntry,
+  saveMealEntry,
+  softDeleteEntry,
+  undoMove,
+} from '../meals/api'
 import { getOrCreateCurrentSheet, getSheet, updateMenuNumber } from './api'
 import { WeeklySheetScreen } from './WeeklySheetScreen'
 
@@ -50,6 +92,8 @@ const mocked = {
   saveMealEntry: vi.mocked(saveMealEntry),
   softDeleteEntry: vi.mocked(softDeleteEntry),
   restoreEntry: vi.mocked(restoreEntry),
+  moveEntry: vi.mocked(moveEntry),
+  undoMove: vi.mocked(undoMove),
   saveDailyLog: vi.mocked(saveDailyLog),
 }
 
@@ -294,6 +338,230 @@ describe('WeeklySheetScreen · edición de comidas', () => {
       expect(screen.queryByText(/No hemos podido actualizar la tabla/)).not.toBeInTheDocument(),
     )
   })
+
+  describe('Mover a…', () => {
+    // Otra comida ya apuntada en la celda destino (jueves · comida)
+    const OTHER: MealEntryWithFood = {
+      ...ENTRY,
+      id: 'e2',
+      day_of_week: 4,
+      meal_slot: 'lunch',
+      position: 1024,
+      food_id: 'food-2',
+      food_name: 'Lentejas',
+      quantity: 1,
+      unit: 'plato',
+    }
+    const BEFORE: SheetDetail = { sheet: SHEET, meals: [ENTRY, OTHER], dailyLogs: [] }
+    const MOVED_ENTRY = { ...ENTRY, day_of_week: 4, meal_slot: 'lunch' as const, position: 2048 }
+    const AFTER: SheetDetail = { sheet: SHEET, meals: [OTHER, MOVED_ENTRY], dailyLogs: [] }
+    const UNDO = { entryId: 'e1', day: 2, slot: 'breakfast' as const, position: 1 }
+    const MOVED_NAME = 'Editar Tostadas · 2 unidades, jueves, comida'
+
+    /** Tira de días (móvil): botón del día cuyo nombre empieza por `day`. */
+    const stripDay = (day: string) =>
+      within(screen.getByRole('group', { name: 'Elige el día' })).getByRole('button', {
+        name: new RegExp(`^${day} `),
+      })
+
+    beforeEach(() => {
+      mocked.getSheet.mockResolvedValue(BEFORE)
+      mocked.moveEntry.mockResolvedValue(UNDO)
+      mocked.undoMove.mockResolvedValue()
+    })
+
+    async function moveToThursdayLunch() {
+      fireEvent.click(await screen.findByRole('button', { name: EDIT_NAME }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Mover a…' }))
+      const group = screen.getByRole('group', { name: 'Mover a…' })
+      fireEvent.click(within(group).getByRole('button', { name: 'jueves' }))
+      fireEvent.change(within(group).getByRole('combobox', { name: 'Momento' }), {
+        target: { value: 'lunch' },
+      })
+      fireEvent.click(within(group).getByRole('button', { name: 'Mover aquí' }))
+    }
+
+    it('mueve al final de la celda destino, cierra el panel, enseña el día y muestra "Comida movida"', async () => {
+      renderAt('/')
+      expect(await screen.findByRole('button', { name: EDIT_NAME })).toBeInTheDocument()
+      mocked.getSheet.mockResolvedValue(AFTER)
+      await moveToThursdayLunch()
+
+      await waitFor(() =>
+        expect(mocked.moveEntry).toHaveBeenCalledWith(ENTRY, { day: 4, slot: 'lunch' }, [OTHER]),
+      )
+      expect(await screen.findByText('Comida movida')).toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Desayuno · martes' })).not.toBeInTheDocument()
+      // En móvil se ve el día destino
+      expect(stripDay('jueves')).toHaveAttribute('aria-pressed', 'true')
+      // Recarga en segundo plano y el foco llega a la comida en su nueva celda
+      expect(await screen.findByRole('button', { name: MOVED_NAME })).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('button', { name: MOVED_NAME })).toHaveFocus())
+      expect(screen.queryByText('Cargando tu semana…')).not.toBeInTheDocument()
+
+      // Deshacer devuelve la comida a su sitio y al día original
+      mocked.getSheet.mockResolvedValue(BEFORE)
+      fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+      await waitFor(() => expect(mocked.undoMove).toHaveBeenCalledWith(UNDO))
+      expect(await screen.findByRole('button', { name: EDIT_NAME })).toBeInTheDocument()
+      expect(screen.queryByText('Comida movida')).not.toBeInTheDocument()
+      expect(stripDay('martes')).toHaveAttribute('aria-pressed', 'true')
+      await waitFor(() => expect(screen.getByRole('button', { name: EDIT_NAME })).toHaveFocus())
+    })
+
+    it('si falla el movimiento, el panel sigue abierto y lo avisa en línea', async () => {
+      mocked.moveEntry.mockRejectedValueOnce(new Error('sin red'))
+      renderAt('/')
+      await moveToThursdayLunch()
+      const group = screen.getByRole('group', { name: 'Mover a…' })
+      expect(await within(group).findByRole('alert')).toHaveTextContent(
+        'No hemos podido mover la comida',
+      )
+      expect(screen.getByRole('group', { name: 'Desayuno · martes' })).toBeInTheDocument()
+      expect(screen.queryByText('Comida movida')).not.toBeInTheDocument()
+    })
+
+    it('la barra "Comida movida" sustituye a "Comida quitada" (una sola barra)', async () => {
+      renderAt('/')
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Editar Lentejas · 1 plato, jueves, comida' }),
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'Quitar de aquí' }))
+      expect(await screen.findByText('Comida quitada')).toBeInTheDocument()
+
+      await moveToThursdayLunch()
+      expect(await screen.findByText('Comida movida')).toBeInTheDocument()
+      expect(screen.queryByText('Comida quitada')).not.toBeInTheDocument()
+      expect(document.querySelectorAll('.meal-undo')).toHaveLength(1)
+    })
+  })
+
+  describe('arrastrar', () => {
+    const OTHER: MealEntryWithFood = {
+      ...ENTRY,
+      id: 'e2',
+      day_of_week: 4,
+      meal_slot: 'lunch',
+      position: 1024,
+      food_id: 'food-2',
+      food_name: 'Lentejas',
+      quantity: 1,
+      unit: 'plato',
+    }
+    const BEFORE: SheetDetail = { sheet: SHEET, meals: [ENTRY, OTHER], dailyLogs: [] }
+    const MOVED_ENTRY = { ...ENTRY, day_of_week: 4, meal_slot: 'lunch' as const, position: 512 }
+    const AFTER: SheetDetail = { sheet: SHEET, meals: [MOVED_ENTRY, OTHER], dailyLogs: [] }
+    const UNDO = { entryId: 'e1', day: 2, slot: 'breakfast' as const, position: 1 }
+    const MOVED_NAME = 'Editar Tostadas · 2 unidades, jueves, comida'
+    // Soltar Tostadas encima de Lentejas: antes de ella, en jueves · comida
+    const TARGET = { day: 4, slot: 'lunch' as const, beforeId: 'e2' }
+
+    beforeEach(() => {
+      dnd.onMove = null
+      mocked.getSheet.mockResolvedValue(BEFORE)
+      mocked.moveEntry.mockResolvedValue(UNDO)
+      mocked.undoMove.mockResolvedValue()
+    })
+
+    /** Simula soltar una comida: llama al onMove que la pantalla dio al provider. */
+    function drop(entry: MealEntryWithFood, target: MoveTarget, cell: MealEntryWithFood[]) {
+      if (!dnd.onMove) throw new Error('La tabla no está dentro de MealDndProvider')
+      const onMove = dnd.onMove
+      act(() => onMove(entry, target, cell))
+    }
+
+    it('la tabla es arrastrable y soltar mueve como "Mover a…" (barra, día y foco)', async () => {
+      renderAt('/')
+      expect(await screen.findByRole('button', { name: EDIT_NAME })).toBeInTheDocument()
+      // La tabla está dentro de MealDndProvider (que recibió el onMove de la pantalla)
+      expect(dnd.onMove).not.toBeNull()
+
+      mocked.getSheet.mockResolvedValue(AFTER)
+      drop(ENTRY, TARGET, [OTHER])
+
+      expect(mocked.moveEntry).toHaveBeenCalledWith(ENTRY, TARGET, [OTHER])
+      expect(await screen.findByText('Comida movida')).toBeInTheDocument()
+      const strip = within(screen.getByRole('group', { name: 'Elige el día' }))
+      expect(strip.getByRole('button', { name: /^jueves / })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      expect(await screen.findByRole('button', { name: MOVED_NAME })).toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('button', { name: MOVED_NAME })).toHaveFocus())
+
+      // Deshacer devuelve la comida a su sitio
+      mocked.getSheet.mockResolvedValue(BEFORE)
+      fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+      await waitFor(() => expect(mocked.undoMove).toHaveBeenCalledWith(UNDO))
+      expect(await screen.findByRole('button', { name: EDIT_NAME })).toBeInTheDocument()
+    })
+
+    it('soltar sobre un día de la tira (móvil) lo lleva al final de ese día y la tira cambia', async () => {
+      renderAt('/')
+      expect(await screen.findByRole('button', { name: EDIT_NAME })).toBeInTheDocument()
+      const strip = within(screen.getByRole('group', { name: 'Elige el día' }))
+      // Se parte de otro día distinto del destino
+      fireEvent.click(strip.getByRole('button', { name: /^martes / }))
+      expect(strip.getByRole('button', { name: /^jueves / })).toHaveAttribute(
+        'aria-pressed',
+        'false',
+      )
+
+      // Lo que el provider resolvería al soltar Tostadas sobre la J de la tira
+      const resolved = resolveDrop({
+        activeEntry: ENTRY,
+        overId: stripDayDropId(4),
+        meals: [ENTRY, OTHER],
+      })
+      expect(resolved).not.toBeNull()
+      const { target, cellEntries } = resolved!
+      expect(target).toEqual({ day: 4, slot: 'breakfast' })
+
+      const MOVED_TO_STRIP = { ...ENTRY, day_of_week: 4 }
+      mocked.getSheet.mockResolvedValue({
+        sheet: SHEET,
+        meals: [MOVED_TO_STRIP, OTHER],
+        dailyLogs: [],
+      })
+      drop(ENTRY, target, cellEntries)
+
+      expect(mocked.moveEntry).toHaveBeenCalledWith(ENTRY, { day: 4, slot: 'breakfast' }, [])
+      expect(await screen.findByText('Comida movida')).toBeInTheDocument()
+      expect(strip.getByRole('button', { name: /^jueves / })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      expect(
+        await screen.findByRole('button', {
+          name: 'Editar Tostadas · 2 unidades, jueves, desayuno',
+        }),
+      ).toBeInTheDocument()
+    })
+
+    it('soltar con el panel abierto lo cierra', async () => {
+      renderAt('/')
+      fireEvent.click(await screen.findByRole('button', { name: EDIT_NAME }))
+      expect(await screen.findByRole('group', { name: 'Desayuno · martes' })).toBeInTheDocument()
+
+      drop(ENTRY, TARGET, [OTHER])
+      expect(await screen.findByText('Comida movida')).toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Desayuno · martes' })).not.toBeInTheDocument()
+    })
+
+    it('si falla el movimiento, avisa encima de la tabla y la comida se queda', async () => {
+      mocked.moveEntry.mockRejectedValueOnce(new Error('sin red'))
+      renderAt('/')
+      expect(await screen.findByRole('button', { name: EDIT_NAME })).toBeInTheDocument()
+
+      drop(ENTRY, TARGET, [OTHER])
+      expect(await screen.findByRole('alert')).toHaveTextContent('No hemos podido mover la comida')
+      expect(screen.queryByText('Comida movida')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: EDIT_NAME })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Entendido' }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+  })
 })
 
 describe('WeeklySheetScreen · seguimiento diario', () => {
@@ -361,7 +629,11 @@ describe('WeeklySheetScreen · seguimiento diario', () => {
     await waitFor(() =>
       expect(screen.queryByRole('group', { name: PANEL })).not.toBeInTheDocument(),
     )
-    expect(screen.getByRole('button', { name: 'Editar agua: 1,5 L, martes' })).toHaveFocus()
+    // El foco vuelve tras cerrar el panel (en un ciclo posterior): con la suite
+    // completa bajo carga llegaba después de la comprobación (test intermitente).
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Editar agua: 1,5 L, martes' })).toHaveFocus(),
+    )
     // Sin cambios no se guarda nada
     expect(mocked.saveDailyLog).not.toHaveBeenCalled()
   })

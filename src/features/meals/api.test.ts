@@ -56,6 +56,7 @@ import {
   type Food,
   getFoodUsage,
   listFoods,
+  moveEntry,
   renameFood,
   resolveFoodForName,
   restoreEntry,
@@ -63,7 +64,9 @@ import {
   setFavorite,
   softDeleteEntry,
   topFoodsForSlot,
+  undoMove,
 } from './api'
+import type { MealEntryWithFood } from '../weekly-sheets/api'
 import { prepareCatalog } from './normalize'
 
 function respond(...results: Result[]) {
@@ -309,5 +312,169 @@ describe('renameFood', () => {
     await expect(renameFood('f1', 'Pan')).rejects.toThrow(
       'No se ha podido cambiar el nombre de la comida: boom',
     )
+  })
+})
+
+describe('moveEntry / undoMove', () => {
+  function entry(overrides: Partial<MealEntryWithFood> = {}): MealEntryWithFood {
+    return {
+      id: 'm',
+      day_of_week: 1,
+      meal_slot: 'breakfast',
+      quantity: 2,
+      unit: 'rebanadas',
+      position: 0,
+      food_id: 'f1',
+      food_name: 'Tostada',
+      ...overrides,
+    }
+  }
+  const lunchTue = (id: string, position: number) =>
+    entry({ id, day_of_week: 2, meal_slot: 'lunch', position })
+
+  /** Updates enviados, como [id, payload], en orden. */
+  function updates() {
+    return mocks.state.queries.map((q) => {
+      const update = q.calls.find((c) => c.method === 'update')!
+      const eq = q.calls.find((c) => c.method === 'eq')!
+      return [eq.args[1], update.args[0]]
+    })
+  }
+
+  /** Ningún update toca cantidad, unidad ni comida: solo celda y posición. */
+  function expectOnlyPlacement() {
+    for (const q of mocks.state.queries) {
+      expect(q.table).toBe('meal_entries')
+      const payload = q.calls.find((c) => c.method === 'update')!.args[0] as object
+      expect(Object.keys(payload).sort()).toEqual(['day_of_week', 'meal_slot', 'position'])
+      expect(payload).not.toHaveProperty('quantity')
+      expect(payload).not.toHaveProperty('unit')
+      expect(payload).not.toHaveProperty('food_id')
+    }
+  }
+
+  it('a otra celda, al final: un único update con máx + 1024', async () => {
+    respond(ok(null))
+    const undo = await moveEntry(entry({ position: 512 }), { day: 2, slot: 'lunch' }, [
+      lunchTue('a', 0),
+      lunchTue('b', 2048),
+    ])
+    expect(undo).toEqual({ entryId: 'm', day: 1, slot: 'breakfast', position: 512 })
+    expect(mocks.state.queries).toHaveLength(1)
+    expect(calls(0)).toEqual([
+      { method: 'update', args: [{ day_of_week: 2, meal_slot: 'lunch', position: 3072 }] },
+      { method: 'eq', args: ['id', 'm'] },
+      { method: 'is', args: ['deleted_at', null] },
+    ])
+    expectOnlyPlacement()
+  })
+
+  it('entre dos con hueco: punto medio', async () => {
+    respond(ok(null))
+    await moveEntry(entry(), { day: 2, slot: 'lunch', beforeId: 'b' }, [
+      lunchTue('a', 0),
+      lunchTue('b', 1024),
+    ])
+    expect(updates()).toEqual([['m', { day_of_week: 2, meal_slot: 'lunch', position: 512 }]])
+    expectOnlyPlacement()
+  })
+
+  it('sin hueco: renumera la celda destino y después mueve', async () => {
+    respond(ok(null), ok(null), ok(null))
+    await moveEntry(entry(), { day: 2, slot: 'lunch', beforeId: 'b' }, [
+      lunchTue('b', 1),
+      lunchTue('a', 0),
+    ])
+    expect(updates()).toEqual([
+      ['a', { day_of_week: 2, meal_slot: 'lunch', position: 0 }],
+      ['b', { day_of_week: 2, meal_slot: 'lunch', position: 2048 }],
+      ['m', { day_of_week: 2, meal_slot: 'lunch', position: 1024 }],
+    ])
+    for (const q of mocks.state.queries) {
+      expect(q.calls).toContainEqual({ method: 'is', args: ['deleted_at', null] })
+    }
+    expectOnlyPlacement()
+  })
+
+  it('ignora la propia entrada si viene en cellEntries', async () => {
+    respond(ok(null))
+    const moving = entry({ day_of_week: 2, meal_slot: 'lunch', position: 0 })
+    await moveEntry(moving, { day: 2, slot: 'lunch' }, [moving, lunchTue('a', 1024)])
+    expect(updates()).toEqual([['m', { day_of_week: 2, meal_slot: 'lunch', position: 2048 }]])
+  })
+
+  it.each([
+    ['al final, siendo ya la última', undefined, ['a', 'm']],
+    ['antes de su siguiente', 'b', ['a', 'm', 'b']],
+    ['sobre sí misma', 'm', ['a', 'm', 'b']],
+  ])('misma celda y mismo sitio (%s): no llama a Supabase', async (_label, beforeId, ids) => {
+    const all = [lunchTue('a', 0), lunchTue('m', 1024), lunchTue('b', 2048)]
+    const cell = all.filter((e) => ids.includes(e.id))
+    await expect(moveEntry(all[1], { day: 2, slot: 'lunch', beforeId }, cell)).resolves.toEqual({
+      entryId: 'm',
+      day: 2,
+      slot: 'lunch',
+      position: 1024,
+    })
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('misma celda pero a otro sitio: sí mueve', async () => {
+    respond(ok(null))
+    const moving = lunchTue('m', 1024)
+    await moveEntry(moving, { day: 2, slot: 'lunch', beforeId: 'a' }, [
+      lunchTue('a', 0),
+      moving,
+      lunchTue('b', 2048),
+    ])
+    expect(updates()).toEqual([['m', { day_of_week: 2, meal_slot: 'lunch', position: -1024 }]])
+  })
+
+  it.each([
+    [{ day: 0, slot: 'lunch' }, 'El día tiene que estar entre lunes y domingo.'],
+    [{ day: 8, slot: 'lunch' }, 'El día tiene que estar entre lunes y domingo.'],
+    [{ day: 1.5, slot: 'lunch' }, 'El día tiene que estar entre lunes y domingo.'],
+    [{ day: 3, slot: 'merienda' }, 'Elige un momento del día válido.'],
+  ])('valida el destino %o sin llamar a Supabase', async (target, message) => {
+    await expect(moveEntry(entry(), target as never, [])).rejects.toThrow(message)
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('propaga el error del update', async () => {
+    respond(fail('boom'))
+    await expect(moveEntry(entry(), { day: 2, slot: 'lunch' }, [])).rejects.toThrow(
+      'No se ha podido mover la comida: boom',
+    )
+  })
+
+  it('si falla la renumeración, no mueve la entrada', async () => {
+    respond(fail('sin red'))
+    await expect(
+      moveEntry(entry(), { day: 2, slot: 'lunch', beforeId: 'b' }, [
+        lunchTue('a', 0),
+        lunchTue('b', 1),
+      ]),
+    ).rejects.toThrow('No se ha podido mover la comida: sin red')
+    expect(mocks.state.queries).toHaveLength(1)
+    expect(updates()[0][0]).toBe('a')
+  })
+
+  it('undoMove restaura día, momento y posición originales', async () => {
+    respond(ok(null), ok(null))
+    const undo = await moveEntry(entry({ position: 512 }), { day: 2, slot: 'lunch' }, [])
+    await undoMove(undo)
+    expect(calls(1)).toEqual([
+      { method: 'update', args: [{ day_of_week: 1, meal_slot: 'breakfast', position: 512 }] },
+      { method: 'eq', args: ['id', 'm'] },
+      { method: 'is', args: ['deleted_at', null] },
+    ])
+    expectOnlyPlacement()
+  })
+
+  it('undoMove propaga el error', async () => {
+    respond(fail('x'))
+    await expect(
+      undoMove({ entryId: 'm', day: 1, slot: 'breakfast', position: 0 }),
+    ).rejects.toThrow('No se ha podido deshacer el movimiento: x')
   })
 })

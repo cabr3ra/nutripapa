@@ -65,3 +65,17 @@
   outline: 3px solid var(--color-text);
   outline-offset: 2px;
 }
+
+/*
+ * Arrastrando una comida encima de este día (spec 008, solo móvil: la tira no
+ * se ve en PC): borde discontinuo carbón y fondo superficie. El texto no cambia
+ * (carbón sobre superficie, contraste alto). El día activo conserva su marca:
+ * sigue en salvia y solo cambia el estilo del borde a discontinuo.
+ */
+.day-strip__day--over {
+  border: 3px dashed var(--color-text);
+}
+
+.day-strip__day--over:not(.day-strip__day--selected) {
+  background-color: var(--color-surface);
+}

@@ -1,0 +1,18 @@
+/* Comida "en la mano" mientras se arrastra (spec 008). Solo tokens de la paleta. */
+.meal-dnd-overlay {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-4);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  cursor: grabbing;
+  touch-action: manipulation;
+  white-space: nowrap;
+}

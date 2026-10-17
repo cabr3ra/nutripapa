@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import {
   afterEach,
   beforeEach,
@@ -398,7 +398,10 @@ describe('MealPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
     expect(handlers.onClose).toHaveBeenCalledTimes(1)
 
-    // Primer Escape: cierra la lista de sugerencias; segundo: cierra el panel
+    // Primer Escape: cierra la lista de sugerencias; segundo: cierra el panel.
+    // La lista se abre al recibir el foco tras la carga: esperar a que esté
+    // abierta evita que el primer Escape cierre el panel (test intermitente).
+    await waitFor(() => expect(input).toHaveAttribute('aria-expanded', 'true'))
     fireEvent.keyDown(input, { key: 'Escape' })
     expect(handlers.onClose).toHaveBeenCalledTimes(1)
     fireEvent.keyDown(input, { key: 'Escape' })
@@ -406,6 +409,122 @@ describe('MealPanel', () => {
 
     fireEvent.keyDown(quantityInput(), { key: 'Escape' })
     expect(handlers.onClose).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('MealPanel · Mover a…', () => {
+  function renderWithMove(onMove = vi.fn().mockResolvedValue(undefined)) {
+    render(
+      <MealPanel
+        sheetId="s1"
+        dayOfWeek={2}
+        mealSlot="breakfast"
+        entry={ENTRY}
+        onSaved={handlers.onSaved}
+        onClose={handlers.onClose}
+        onRemoved={handlers.onRemoved}
+        onMove={onMove}
+      />,
+    )
+    return onMove
+  }
+
+  const moveGroup = () => screen.getByRole('group', { name: 'Mover a…' })
+
+  it('sin onMove o sin entrada no hay "Mover a…"', async () => {
+    await renderPanel(ENTRY)
+    expect(screen.queryByRole('button', { name: 'Mover a…' })).not.toBeInTheDocument()
+  })
+
+  it('abre el selector en línea con el día y el momento actuales y "Ya está aquí"', async () => {
+    renderWithMove()
+    await screen.findByRole('combobox', { name: '¿Qué has comido?' })
+    fireEvent.click(screen.getByRole('button', { name: 'Mover a…' }))
+
+    const group = moveGroup()
+    // Dentro del panel (no es una ventana)
+    expect(group.closest('.meal-panel')).not.toBeNull()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    const days = within(within(group).getByRole('group', { name: 'Día' })).getAllByRole('button')
+    expect(days.map((b) => b.textContent)).toEqual(['L', 'M', 'X', 'J', 'V', 'S', 'D'])
+    const tuesday = within(group).getByRole('button', { name: 'martes' })
+    expect(tuesday).toHaveAttribute('aria-pressed', 'true')
+    expect(tuesday).toHaveFocus()
+    expect(within(group).getByRole('button', { name: 'lunes' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(within(group).getByRole('combobox', { name: 'Momento' })).toHaveValue('breakfast')
+
+    const moveHere = within(group).getByRole('button', { name: 'Ya está aquí' })
+    expect(moveHere).toBeDisabled()
+  })
+
+  it('"Mover aquí" llama a onMove con el día y el momento elegidos', async () => {
+    const onMove = renderWithMove()
+    fireEvent.click(await screen.findByRole('button', { name: 'Mover a…' }))
+    const group = moveGroup()
+    fireEvent.click(within(group).getByRole('button', { name: 'miércoles' }))
+    expect(within(group).getByRole('button', { name: 'miércoles' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    fireEvent.change(within(group).getByRole('combobox', { name: 'Momento' }), {
+      target: { value: 'lunch' },
+    })
+    fireEvent.click(within(group).getByRole('button', { name: 'Mover aquí' }))
+    await waitFor(() => expect(onMove).toHaveBeenCalledWith({ day: 3, slot: 'lunch' }))
+    expect(onMove).toHaveBeenCalledTimes(1)
+  })
+
+  it('cambiar solo el momento también permite mover', async () => {
+    const onMove = renderWithMove()
+    fireEvent.click(await screen.findByRole('button', { name: 'Mover a…' }))
+    fireEvent.change(within(moveGroup()).getByRole('combobox', { name: 'Momento' }), {
+      target: { value: 'dinner' },
+    })
+    fireEvent.click(within(moveGroup()).getByRole('button', { name: 'Mover aquí' }))
+    await waitFor(() => expect(onMove).toHaveBeenCalledWith({ day: 2, slot: 'dinner' }))
+  })
+
+  it('mientras mueve dice "Moviendo…"; si falla, avisa en línea', async () => {
+    let reject!: (error: Error) => void
+    const onMove = vi.fn(
+      () =>
+        new Promise<void>((_, r) => {
+          reject = r
+        }),
+    )
+    renderWithMove(onMove)
+    fireEvent.click(await screen.findByRole('button', { name: 'Mover a…' }))
+    fireEvent.click(within(moveGroup()).getByRole('button', { name: 'jueves' }))
+    fireEvent.click(within(moveGroup()).getByRole('button', { name: 'Mover aquí' }))
+
+    const busy = await within(moveGroup()).findByRole('button', { name: 'Moviendo…' })
+    expect(busy).toBeDisabled()
+    reject(new Error('sin red'))
+
+    expect(await within(moveGroup()).findByRole('alert')).toHaveTextContent(
+      'No hemos podido mover la comida',
+    )
+    expect(within(moveGroup()).getByRole('button', { name: 'Mover aquí' })).toBeEnabled()
+    expect(handlers.onClose).not.toHaveBeenCalled()
+  })
+
+  it('"Cancelar" y Escape cierran el selector sin cerrar el panel', async () => {
+    renderWithMove()
+    fireEvent.click(await screen.findByRole('button', { name: 'Mover a…' }))
+    fireEvent.click(within(moveGroup()).getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('group', { name: 'Mover a…' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mover a…' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mover a…' }))
+    fireEvent.keyDown(within(moveGroup()).getByRole('button', { name: 'martes' }), {
+      key: 'Escape',
+    })
+    expect(screen.queryByRole('group', { name: 'Mover a…' })).not.toBeInTheDocument()
+    expect(handlers.onClose).not.toHaveBeenCalled()
   })
 })
 

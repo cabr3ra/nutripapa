@@ -1,9 +1,12 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { useDndContext, useDndMonitor } from '@dnd-kit/core'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // api.ts importa el cliente de Supabase; aquí solo se usan sus tipos y MEAL_SLOTS
 vi.mock('../../lib/supabase', () => ({ supabase: {} }))
 
+import { cellDropId, entryDragId } from '../meals/dnd/ids'
+import { MealDndProvider } from '../meals/dnd/MealDndProvider'
 import type { DailyLog, MealEntryWithFood } from './api'
 import { formatMealEntry } from './gridFormat'
 import { WeekGrid } from './WeekGrid'
@@ -160,6 +163,26 @@ describe('WeekGrid', () => {
     expect(selectedDays()[0]).toContain('sábado')
     expect(cell(6, 'lunch')).toHaveClass('week-grid__day--selected')
     expect(cell(1, 'lunch')).not.toHaveClass('week-grid__day--selected')
+  })
+
+  it('selectDayRequest elige el día pedido una vez; luego la tira sigue mandando', () => {
+    const onDayChange = vi.fn()
+    const props = { monday: MONDAY, meals: [], dailyLogs: [], today: '2026-01-01', onDayChange }
+    const { rerender } = render(<WeekGrid {...props} selectDayRequest={{ day: 4 }} />)
+    expect(cell(4, 'lunch')).toHaveClass('week-grid__day--selected')
+
+    fireEvent.click(screen.getByRole('button', { name: 'sábado 24 de octubre' }))
+    expect(cell(6, 'lunch')).toHaveClass('week-grid__day--selected')
+    expect(onDayChange).toHaveBeenCalledTimes(1)
+
+    // Misma petición (mismo objeto): no se vuelve a aplicar; una nueva, sí
+    const request = { day: 2 as const }
+    rerender(<WeekGrid {...props} selectDayRequest={request} />)
+    expect(cell(2, 'lunch')).toHaveClass('week-grid__day--selected')
+    fireEvent.click(screen.getByRole('button', { name: 'viernes 23 de octubre' }))
+    rerender(<WeekGrid {...props} selectDayRequest={request} />)
+    expect(cell(5, 'lunch')).toHaveClass('week-grid__day--selected')
+    expect(onDayChange).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -419,5 +442,107 @@ describe('formatMealEntry', () => {
     expect(formatMealEntry({ food_name: 'Leche', quantity: 0.25, unit: 'L' })).toBe(
       'Leche · 0,25 L',
     )
+  })
+})
+
+describe('WeekGrid · arrastre (draggable)', () => {
+  const MEALS = [
+    meal({
+      id: 'e1',
+      day_of_week: 2,
+      meal_slot: 'breakfast',
+      food_name: 'Tostadas',
+      quantity: 2,
+      unit: 'unidades',
+    }),
+    meal({ id: 'e2', day_of_week: 2, meal_slot: 'breakfast', food_name: 'Café', position: 1024 }),
+  ]
+  const EDIT_NAME = 'Editar Tostadas · 2 unidades, martes, desayuno'
+
+  /**
+   * Sonda dentro del DndContext: guarda los ids de las zonas de destino
+   * registradas (en el último render) y avisa si empieza un arrastre.
+   */
+  let droppableIds: string[] = []
+  function DndProbe({ onDragStart }: { onDragStart: () => void }) {
+    const { droppableContainers } = useDndContext()
+    useDndMonitor({ onDragStart })
+    droppableIds = droppableContainers.toArray().map((container) => String(container.id))
+    return null
+  }
+
+  // Con el DndContext real de la app (MealDndProvider): mismos sensores, así un
+  // clic no arrastra porque el ratón necesita moverse 5 px
+  function renderGrid(draggable: boolean) {
+    const onCellActivate = vi.fn()
+    const onDragStart = vi.fn()
+    render(
+      <MealDndProvider meals={MEALS} labelFor={() => 'esta comida'} onMove={vi.fn()}>
+        <WeekGrid
+          monday={MONDAY}
+          meals={MEALS}
+          dailyLogs={[]}
+          today="2026-01-01"
+          onCellActivate={onCellActivate}
+          onTrackingActivate={vi.fn()}
+          draggable={draggable}
+        />
+        <DndProbe onDragStart={onDragStart} />
+      </MealDndProvider>,
+    )
+    return { onCellActivate, onDragStart }
+  }
+
+  beforeEach(() => {
+    droppableIds = []
+  })
+
+  it('cada celda de comida es una zona de destino y cada comida, ordenable', () => {
+    renderGrid(true)
+    const cells = droppableIds.filter((id) => id.startsWith('cell:'))
+    // 5 momentos × 7 días; las filas de seguimiento no son destino
+    expect(cells).toHaveLength(35)
+    expect(cells).toContain(cellDropId(2, 'breakfast'))
+    expect(cells).toContain(cellDropId(7, 'dinner'))
+    expect(droppableIds.filter((id) => id.startsWith('entry:')).sort()).toEqual([
+      entryDragId('e1'),
+      entryDragId('e2'),
+    ])
+  })
+
+  it('el botón de la comida sigue siendo un botón: clic e Intro abren el panel, no arrastran', () => {
+    const { onCellActivate, onDragStart } = renderGrid(true)
+    const edit = screen.getByRole('button', { name: EDIT_NAME })
+    // Sin los attributes del sortable: ni role ni descripción de arrastre
+    expect(edit.tagName).toBe('BUTTON')
+    expect(edit).not.toHaveAttribute('role')
+    expect(edit).not.toHaveAttribute('aria-roledescription')
+    expect(cell(2, 'breakfast')).toContainElement(edit)
+
+    // Clic simple (pulsar y soltar sin moverse): abre el panel
+    fireEvent.pointerDown(edit, { pointerType: 'mouse', isPrimary: true, button: 0 })
+    fireEvent.pointerUp(edit, { pointerType: 'mouse', isPrimary: true, button: 0 })
+    fireEvent.click(edit)
+    expect(onCellActivate).toHaveBeenLastCalledWith({ day: 2, row: 'breakfast' }, 'e1')
+
+    // Intro/Espacio no los captura el arrastre (no se cancela su acción nativa,
+    // que en el navegador es el clic del botón) y no empieza ningún arrastre
+    onCellActivate.mockClear()
+    expect(fireEvent.keyDown(edit, { key: 'Enter', code: 'Enter' })).toBe(true)
+    expect(fireEvent.keyDown(edit, { key: ' ', code: 'Space' })).toBe(true)
+    fireEvent.click(edit)
+    expect(onCellActivate).toHaveBeenCalledTimes(1)
+    expect(onCellActivate).toHaveBeenLastCalledWith({ day: 2, row: 'breakfast' }, 'e1')
+    expect(onDragStart).not.toHaveBeenCalled()
+  })
+
+  it('sin draggable no registra zonas de destino y la tabla no cambia', () => {
+    const { onCellActivate } = renderGrid(false)
+    expect(droppableIds).toEqual([])
+    const edit = screen.getByRole('button', { name: EDIT_NAME })
+    expect(edit).not.toHaveAttribute('style')
+    fireEvent.click(edit)
+    expect(onCellActivate).toHaveBeenLastCalledWith({ day: 2, row: 'breakfast' }, 'e1')
+    expect(document.querySelector('.week-grid__cell--drop-over')).toBeNull()
   })
 })

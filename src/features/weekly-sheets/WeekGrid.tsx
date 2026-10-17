@@ -26,9 +26,36 @@
 // puede activar otro día. Al activar una celda, la tabla elige ese día (por si
 // la ventana pasa de PC a móvil). Al cambiar de día con la tira se avisa con
 // onDayChange y es el contenedor quien decide (WeeklySheetScreen cierra el
-// panel, porque pertenecía al día anterior).
+// panel, porque pertenecía al día anterior). El contenedor también puede pedir
+// un día con selectDayRequest (spec 008: tras mover una comida a otro día).
+//
+// Arrastre (spec 008): con draggable (y dentro de un MealDndProvider), cada
+// celda de comida es una zona de destino (useDroppable) con su lista en un
+// SortableContext, y cada comida es ordenable (useSortable) sobre el MISMO
+// botón "Editar …". Del sortable solo se aplican el ref, la transformación y
+// los oyentes de puntero/táctil; NO sus `attributes` (cambiarían el role del
+// botón) ni su oyente de teclado (Intro/Espacio cogerían la comida en lugar de
+// abrir el panel). Con teclado, la alternativa al arrastre es "Mover a…" en el
+// panel (WCAG 2.5.7). Un clic no arrastra: el ratón necesita moverse 5 px.
+// Mover o reordenar se resuelve solo al soltar (resolveDrop en el provider);
+// durante el arrastre las listas no cambian de celda. En móvil, además, cada
+// botón de la tira L–D es zona de destino (DayStrip con droppable): soltar ahí
+// lleva la comida al mismo momento de ese día, al final. La tira solo se ve por
+// debajo de 48rem, así que en PC esas zonas no aparecen. Sin draggable, la
+// tabla no usa dnd-kit y queda igual que antes.
 
-import { Fragment, useId, useState, type ReactNode } from 'react'
+import {
+  Fragment,
+  useId,
+  useState,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
+import { useDroppable } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { cellDropId, entryDragId } from '../meals/dnd/ids'
 import { type DailyLog, MEAL_SLOTS, type MealEntryWithFood, type MealSlot } from './api'
 import { DayStrip } from './DayStrip'
 import { dayMonthShort, formatMealEntry, formatSteps, formatWater, formatWc } from './gridFormat'
@@ -85,6 +112,18 @@ type WeekGridProps = {
   renderPanel?: () => ReactNode
   /** Aviso al cambiar de día con la tira (móvil); el contenedor decide qué hacer. */
   onDayChange?: (day: DayOfWeek) => void
+  /**
+   * Petición del contenedor para elegir un día desde fuera (spec 008: tras
+   * "Mover a…" a otro día, el móvil muestra el día destino). Cada petición es
+   * un objeto nuevo; la tabla la aplica una vez y luego la tira sigue mandando.
+   * No avisa con onDayChange (no es un cambio hecho con la tira).
+   */
+  selectDayRequest?: { day: DayOfWeek } | null
+  /**
+   * Comidas arrastrables entre celdas y dentro de su celda (spec 008). Solo
+   * tiene efecto con onCellActivate y exige un MealDndProvider por encima.
+   */
+  draggable?: boolean
 }
 
 type TrackingRow = {
@@ -122,10 +161,20 @@ export function WeekGrid({
   activeCell = null,
   renderPanel,
   onDayChange,
+  selectDayRequest = null,
+  draggable = false,
 }: WeekGridProps) {
+  // Sin botones de comida no hay nada que arrastrar
+  const dnd = draggable && onCellActivate !== undefined
   const panelId = useId()
   // El día elegido va ligado a su lunes: si cambia la semana, vuelve al de por defecto
   const [selection, setSelection] = useState<{ monday: IsoDate; day: DayOfWeek } | null>(null)
+  // Petición de día ya aplicada: una nueva se aplica durante el render (sin efecto)
+  const [appliedRequest, setAppliedRequest] = useState<{ day: DayOfWeek } | null>(null)
+  if (selectDayRequest !== appliedRequest) {
+    setAppliedRequest(selectDayRequest)
+    if (selectDayRequest) setSelection({ monday, day: selectDayRequest.day })
+  }
   const selectedDay =
     selection && selection.monday === monday ? selection.day : defaultDay(monday, today)
 
@@ -201,6 +250,7 @@ export function WeekGrid({
             onDayChange?.(day)
           }}
           today={today}
+          droppable={dnd}
         />
       </div>
 
@@ -246,30 +296,35 @@ export function WeekGrid({
                   const entries = mealsByCell.get(`${day}|${slot}`) ?? []
                   // "martes, media mañana" para las etiquetas accesibles
                   const where = `${dayName(day)}, ${label.toLowerCase()}`
-                  return (
-                    <td key={date} className={cellClass(day, slot)} data-day={day} data-row={slot}>
+                  const content = (
+                    <>
                       {entries.length > 0 && (
                         <ul className="week-grid__entries">
-                          {entries.map((entry) => (
-                            <li key={entry.id}>
-                              {onCellActivate ? (
-                                <button
-                                  type="button"
-                                  className="week-grid__entry-button"
-                                  aria-label={`Editar ${formatMealEntry(entry)}, ${where}`}
-                                  data-day={day}
-                                  data-row={slot}
-                                  data-entry-id={entry.id}
-                                  {...expandedProps(day, slot, entry.id)}
-                                  onClick={() => activate({ day, row: slot }, entry.id)}
-                                >
-                                  {formatMealEntry(entry)}
-                                </button>
-                              ) : (
-                                formatMealEntry(entry)
-                              )}
-                            </li>
-                          ))}
+                          {entries.map((entry) => {
+                            if (!onCellActivate) {
+                              return <li key={entry.id}>{formatMealEntry(entry)}</li>
+                            }
+                            const buttonProps = {
+                              type: 'button',
+                              className: 'week-grid__entry-button',
+                              'aria-label': `Editar ${formatMealEntry(entry)}, ${where}`,
+                              'data-day': day,
+                              'data-row': slot,
+                              'data-entry-id': entry.id,
+                              ...expandedProps(day, slot, entry.id),
+                              onClick: () => activate({ day, row: slot }, entry.id),
+                              children: formatMealEntry(entry),
+                            } as const
+                            return (
+                              <li key={entry.id}>
+                                {dnd ? (
+                                  <SortableEntryButton entryId={entry.id} {...buttonProps} />
+                                ) : (
+                                  <button {...buttonProps} />
+                                )}
+                              </li>
+                            )
+                          })}
                         </ul>
                       )}
                       {onCellActivate && (
@@ -285,6 +340,21 @@ export function WeekGrid({
                           <span aria-hidden="true">+</span>
                         </button>
                       )}
+                    </>
+                  )
+                  return dnd ? (
+                    <DroppableMealCell
+                      key={date}
+                      day={day}
+                      slot={slot}
+                      entryIds={entries.map((entry) => entryDragId(entry.id))}
+                      className={cellClass(day, slot)}
+                    >
+                      {content}
+                    </DroppableMealCell>
+                  ) : (
+                    <td key={date} className={cellClass(day, slot)} data-day={day} data-row={slot}>
+                      {content}
                     </td>
                   )
                 })}
@@ -337,5 +407,70 @@ export function WeekGrid({
         </tbody>
       </table>
     </div>
+  )
+}
+
+type DroppableMealCellProps = {
+  day: DayOfWeek
+  slot: MealSlot
+  /** Ids de arrastre de las comidas de la celda, en orden de position. */
+  entryIds: string[]
+  className: string
+  children: ReactNode
+}
+
+/**
+ * Celda de comida que acepta comidas arrastradas (spec 008). Se marca como
+ * destino tanto si el puntero está sobre la celda como sobre una de sus
+ * comidas (la detección de colisiones prefiere la comida para insertar antes).
+ */
+function DroppableMealCell({ day, slot, entryIds, className, children }: DroppableMealCellProps) {
+  const { setNodeRef, isOver, over } = useDroppable({ id: cellDropId(day, slot) })
+  const overHere = isOver || (over !== null && entryIds.includes(String(over.id)))
+  return (
+    <td
+      ref={setNodeRef}
+      className={`${className}${overHere ? ' week-grid__cell--drop-over' : ''}`}
+      data-day={day}
+      data-row={slot}
+    >
+      <SortableContext items={entryIds} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
+    </td>
+  )
+}
+
+type SortableEntryButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  entryId: string
+  className: string
+}
+
+/**
+ * Botón "Editar …" de una comida que además se puede arrastrar con ratón o con
+ * pulsación larga (spec 008). Ver la cabecera del archivo: sin `attributes` del
+ * sortable y sin su oyente de teclado, para que el botón siga siendo un botón y
+ * Intro/Espacio abran el panel.
+ */
+function SortableEntryButton({ entryId, className, style, ...rest }: SortableEntryButtonProps) {
+  const { setNodeRef, transform, transition, listeners, isDragging } = useSortable({
+    id: entryDragId(entryId),
+  })
+  // Solo puntero y táctil: el teclado se queda con el clic nativo del botón
+  const pointerListeners = { ...listeners }
+  delete pointerListeners.onKeyDown
+  const dragStyle: CSSProperties = {
+    ...style,
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+  return (
+    <button
+      {...rest}
+      ref={setNodeRef}
+      className={`${className}${isDragging ? ' week-grid__entry-button--dragging' : ''}`}
+      style={dragStyle}
+      {...pointerListeners}
+    />
   )
 }

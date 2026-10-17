@@ -1,23 +1,27 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useParams } from 'react-router'
-import { restoreEntry } from '../meals/api'
-import { MealPanel, UndoBar } from '../meals/MealPanel'
+import { moveEntry, type MoveTarget, type MoveUndo, restoreEntry, undoMove } from '../meals/api'
+import { buildLabelFor } from '../meals/dnd/announcements'
+import { MealDndProvider } from '../meals/dnd/MealDndProvider'
+import { type MealMoveTarget, MealPanel, UndoBar } from '../meals/MealPanel'
 import { TrackingPanel } from '../daily-tracking/TrackingPanel'
 import {
   type DailyLog,
+  type MealEntryWithFood,
   getOrCreateCurrentSheet,
   getSheet,
   type SheetDetail,
   updateMenuNumber,
 } from './api'
 import { type ActiveCell, type MealCellTarget, type TrackingCellTarget, WeekGrid } from './WeekGrid'
-import { weekRangeLabel, weekTitle } from './week'
+import { type DayOfWeek, weekRangeLabel, weekTitle } from './week'
 import './WeeklySheetScreen.css'
 
 const LOAD_ERROR = 'No hemos podido cargar tu semana. Revisa la conexión y prueba otra vez.'
 const INVALID_MENU = 'Escribe un número a partir de 1'
 const SAVE_ERROR = 'No hemos podido guardar el número de menú. Prueba otra vez.'
 const REFRESH_ERROR = 'No hemos podido actualizar la tabla. Revisa la conexión y prueba otra vez.'
+const DRAG_MOVE_ERROR = 'No hemos podido mover la comida. Revisa la conexión y prueba otra vez.'
 const SAVED_VISIBLE_MS = 2500
 
 // Resultado de una carga, ligado a la clave (tabla + intento) que lo pidió:
@@ -172,8 +176,19 @@ type SheetEditorProps = {
 /** Botón de la tabla al que vuelve el foco: el de una comida o el "+" de la celda. */
 type FocusTarget = { day: number; row: string; entryId?: string }
 
-/** Comida quitada que aún se puede recuperar con "Deshacer". */
-type Undo = { entryId: string; day: number; row: string }
+/**
+ * Última acción que se puede deshacer (una sola barra a la vez): una comida
+ * quitada o una comida movida. `key` cambia en cada acción para que la barra
+ * nueva arranque de cero (sin el error ni el "ocupado" de la anterior).
+ */
+type Undo =
+  | { kind: 'removed'; key: number; entryId: string; day: number; row: string }
+  | { kind: 'moved'; key: number; move: MoveUndo }
+
+const UNDO_MESSAGES: Record<Undo['kind'], string> = {
+  removed: 'Comida quitada',
+  moved: 'Comida movida',
+}
 
 const isTrackingRow = (row: string) => row === 'water' || row === 'wc' || row === 'steps'
 
@@ -195,8 +210,9 @@ function mergeLogs(loaded: DailyLog[], saved: Record<number, DailyLog>): DailyLo
 
 /**
  * Tabla con edición: un solo panel abierto a la vez (activar otra celda lo
- * reemplaza), recarga tras guardar o quitar y barra "Comida quitada" con
- * Deshacer, integrada encima de la tabla. Las filas de seguimiento abren el
+ * reemplaza), recarga tras guardar, quitar o mover y barra "Comida quitada" /
+ * "Comida movida" con Deshacer (una sola, la de la última acción), integrada
+ * encima de la tabla. Las filas de seguimiento abren el
  * panel del día (TrackingPanel), que guarda solo y no se cierra al recargar.
  */
 function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
@@ -207,6 +223,13 @@ function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
   const dailyLogs = mergeLogs(detail.dailyLogs, savedLogs)
   // Petición de foco; el objeto nuevo en cada petición hace que el efecto vuelva a correr
   const [focusRequest, setFocusRequest] = useState<FocusTarget | null>(null)
+  // Petición de día para la tabla (móvil): tras mover o deshacer, el día de la comida
+  const [dayRequest, setDayRequest] = useState<{ day: DayOfWeek } | null>(null)
+  // El último arrastre no se pudo guardar (aviso encima de la tabla)
+  const [dragMoveFailed, setDragMoveFailed] = useState(false)
+  const undoSeq = useRef(0)
+  // Nombres legibles para los anuncios del arrastre
+  const labelFor = useMemo(() => buildLabelFor(detail.meals), [detail.meals])
   const gridRef = useRef<HTMLDivElement>(null)
 
   // Devuelve el foco al botón pedido cuando el panel ya se ha cerrado. Si la
@@ -259,19 +282,81 @@ function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
     if (focus) setFocusRequest({ ...focus })
   }
 
+  /**
+   * Pide el foco para una comida y recarga. Si la comida aún no está en la
+   * celda (llega con la recarga), el foco cae primero en el "+" de esa celda;
+   * tras la recarga se pide otra vez, salvo que el foco se haya ido entretanto.
+   */
+  async function focusAndRefresh(focus: FocusTarget) {
+    setFocusRequest({ ...focus })
+    await onRefresh()
+    const fallback = gridRef.current?.querySelector(
+      `button[data-day="${focus.day}"][data-row="${focus.row}"]:not([data-entry-id])`,
+    )
+    if (fallback && document.activeElement === fallback) setFocusRequest({ ...focus })
+  }
+
   function handleRemoved(cell: ActiveCell, entryId: string) {
     // La barra nueva sustituye a la anterior (key distinta)
-    setUndo({ entryId, day: cell.day, row: cell.row })
+    setUndo({ kind: 'removed', key: ++undoSeq.current, entryId, day: cell.day, row: cell.row })
     closePanel({ day: cell.day, row: cell.row })
     void onRefresh()
   }
 
+  /**
+   * Movimiento común a "Mover a…" y al arrastre: mueve la comida (una sola
+   * fila), muestra "Comida movida" con Deshacer, cierra el panel, en móvil
+   * enseña el día destino y devuelve el foco a la comida movida. Si falla,
+   * lanza: quien llama decide cómo avisar.
+   */
+  async function performMove(
+    entry: MealEntryWithFood,
+    target: MoveTarget,
+    cellEntries: readonly MealEntryWithFood[],
+  ) {
+    const move = await moveEntry(entry, target, cellEntries)
+    setDragMoveFailed(false)
+    setUndo({ kind: 'moved', key: ++undoSeq.current, move })
+    setActive(null)
+    setDayRequest({ day: target.day as DayOfWeek })
+    // El panel no espera a la recarga (ya se ha cerrado)
+    void focusAndRefresh({ day: target.day, row: target.slot, entryId: entry.id })
+  }
+
+  /** "Mover a…": al final de la celda destino. Si falla, lanza y el panel lo avisa en línea. */
+  async function handleMove(entry: MealEntryWithFood, target: MealMoveTarget) {
+    const cellEntries = detail.meals.filter(
+      (meal) => meal.day_of_week === target.day && meal.meal_slot === target.slot,
+    )
+    await performMove(entry, { day: target.day, slot: target.slot }, cellEntries)
+  }
+
+  /**
+   * Arrastre (spec 008): el destino y las vecinas ya vienen resueltos al soltar
+   * (resolveDrop). Si falla, la comida se queda donde estaba y se avisa encima
+   * de la tabla, porque no hay panel abierto en el que hacerlo.
+   */
+  function handleDragMove(
+    entry: MealEntryWithFood,
+    target: MoveTarget,
+    cellEntries: MealEntryWithFood[],
+  ) {
+    performMove(entry, target, cellEntries).catch(() => setDragMoveFailed(true))
+  }
+
   async function handleUndo(item: Undo) {
     // Si falla, lanza y la barra lo avisa en línea
-    await restoreEntry(item.entryId)
+    let focus: FocusTarget
+    if (item.kind === 'removed') {
+      await restoreEntry(item.entryId)
+      focus = { day: item.day, row: item.row, entryId: item.entryId }
+    } else {
+      await undoMove(item.move)
+      focus = { day: item.move.day, row: item.move.slot, entryId: item.move.entryId }
+      setDayRequest({ day: item.move.day as DayOfWeek })
+    }
     setUndo(null)
-    setFocusRequest({ day: item.day, row: item.row })
-    await onRefresh()
+    await focusAndRefresh(focus)
   }
 
   function renderPanel() {
@@ -305,6 +390,7 @@ function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
         }}
         onClose={() => closePanel(cell)}
         onRemoved={(entryId) => handleRemoved(cell, entryId)}
+        onMove={editingEntry ? (target) => handleMove(editingEntry, target) : undefined}
       />
     )
   }
@@ -322,25 +408,42 @@ function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
 
       {undo && (
         <UndoBar
-          key={undo.entryId}
-          message="Comida quitada"
+          key={undo.key}
+          message={UNDO_MESSAGES[undo.kind]}
           onUndo={() => handleUndo(undo)}
           onClose={() => setUndo(null)}
         />
       )}
 
+      {dragMoveFailed && (
+        <div className="sheet-screen__message" role="alert">
+          <p>{DRAG_MOVE_ERROR}</p>
+          <button
+            className="sheet-screen__button"
+            type="button"
+            onClick={() => setDragMoveFailed(false)}
+          >
+            Entendido
+          </button>
+        </div>
+      )}
+
       <div ref={gridRef}>
-        <WeekGrid
-          monday={detail.sheet.start_date}
-          meals={detail.meals}
-          dailyLogs={dailyLogs}
-          onCellActivate={handleActivate}
-          onTrackingActivate={handleTrackingActivate}
-          activeCell={active}
-          renderPanel={renderPanel}
-          // En móvil, cambiar de día cierra el panel: era del día anterior
-          onDayChange={() => setActive(null)}
-        />
+        <MealDndProvider meals={detail.meals} labelFor={labelFor} onMove={handleDragMove}>
+          <WeekGrid
+            monday={detail.sheet.start_date}
+            meals={detail.meals}
+            dailyLogs={dailyLogs}
+            onCellActivate={handleActivate}
+            onTrackingActivate={handleTrackingActivate}
+            activeCell={active}
+            renderPanel={renderPanel}
+            // En móvil, cambiar de día cierra el panel: era del día anterior
+            onDayChange={() => setActive(null)}
+            selectDayRequest={dayRequest}
+            draggable
+          />
+        </MealDndProvider>
       </div>
     </div>
   )

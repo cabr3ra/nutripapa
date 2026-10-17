@@ -12,7 +12,7 @@ table first; nothing else in this repo should be needed to get oriented.
 | 005 | cloudflare-deploy | blocked | 001 | looping | 5 |
 | 006 | weekly-table | done | 004 | — | 6 |
 | 007 | meal-entry | done | 006 | — | 7 |
-| 008 | drag-and-drop | todo | 007 | tasks_ready | 8 |
+| 008 | drag-and-drop | done | 007 | — | 8 |
 | 009 | daily-tracking | done | 006 | — | 9 |
 | 010 | offline-sync | todo | 007, 009 | tasks_ready | 10 |
 | 011 | pdf-export | todo | 006, 009 | tasks_ready | 11 |

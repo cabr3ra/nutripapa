@@ -1,5 +1,7 @@
 -- Spec 007 · Comprobación de public.save_meal_entry(entry_id, sheet_id, day, slot,
 --            food_id, food_name, quantity, unit).
+-- Spec 008 · Posiciones dispersas: las entradas nuevas y las que cambian de celda
+--            van a máx + 1024 (celda vacía → 0; datos antiguos 0, 1 → 1025).
 --
 -- Se ejecuta con:  supabase db query --linked -f supabase/tests/meal_check.sql
 --
@@ -160,8 +162,8 @@ begin
     if v_food_of is distinct from v_food then
       raise exception 'MEAL_CHECK_FAIL: 2. la entrada no reutiliza la comida existente';
     end if;
-    if v_pos is distinct from 1 then
-      raise exception 'MEAL_CHECK_FAIL: 2. la segunda entrada de la celda tiene position % (esperado 1)', v_pos;
+    if v_pos is distinct from 1024 then
+      raise exception 'MEAL_CHECK_FAIL: 2. la segunda entrada de la celda tiene position % (esperado 1024)', v_pos;
     end if;
 
     select f.name, f.default_quantity, f.default_unit into v_name, v_qty, v_unit
@@ -172,7 +174,7 @@ begin
     if v_qty is distinct from 3 or v_unit is distinct from 'unidades' then
       raise exception 'MEAL_CHECK_FAIL: 2. habituales son %/% (esperado 3/unidades)', v_qty, v_unit;
     end if;
-    raise notice 'OK 2: reutiliza la comida sin distinguir mayúsculas/espacios, position 1, habituales 3/unidades';
+    raise notice 'OK 2: reutiliza la comida sin distinguir mayúsculas/espacios, position 1024, habituales 3/unidades';
 
     -- =====================================================================
     -- 3. Comida elegida del catálogo (p_food_id) en otra celda
@@ -229,8 +231,8 @@ begin
     if v_day is distinct from 3 or v_slot is distinct from 'lunch' then
       raise exception 'MEAL_CHECK_FAIL: 4. la entrada no se movió a (3, lunch) (está en %, %)', v_day, v_slot;
     end if;
-    if v_pos is distinct from 1 then
-      raise exception 'MEAL_CHECK_FAIL: 4. al moverla quedó en position % (esperado 1, al final)', v_pos;
+    if v_pos is distinct from 1024 then
+      raise exception 'MEAL_CHECK_FAIL: 4. al moverla quedó en position % (esperado 1024, al final)', v_pos;
     end if;
 
     -- Editar no crea filas nuevas: siguen 3 entradas en la tabla
@@ -238,7 +240,7 @@ begin
     if v_n <> 3 then
       raise exception 'MEAL_CHECK_FAIL: 4. la tabla tiene % entradas (esperadas 3)', v_n;
     end if;
-    raise notice 'OK 4: moverla a otra celda la pone al final (position 1) sin crear filas';
+    raise notice 'OK 4: moverla a otra celda la pone al final (position 1024) sin crear filas';
 
     -- =====================================================================
     -- 5. Unidad solo con espacios → se guarda null
@@ -465,7 +467,7 @@ begin
       into v_ret, v_day, v_slot, v_pos, v_qty, v_unit, v_food_of
     from public.meal_entries e where e.id = v_entry_1;
     if v_ret is distinct from v_sheet or v_day is distinct from 3 or v_slot is distinct from 'lunch'
-       or v_pos is distinct from 1 or v_qty is distinct from 5 or v_unit is distinct from 'unidad'
+       or v_pos is distinct from 1024 or v_qty is distinct from 5 or v_unit is distinct from 'unidad'
        or v_food_of is distinct from v_food then
       raise exception 'MEAL_CHECK_FAIL: 8. la entrada 1 de A cambió (día %, %, pos %, %/%)',
         v_day, v_slot, v_pos, v_qty, v_unit;
@@ -488,6 +490,39 @@ begin
       raise exception 'MEAL_CHECK_FAIL: 9. anon pudo llamar a la función (sqlstate %)', coalesce(v_state, 'sin error');
     end if;
     raise notice 'OK 9: anon no puede ejecutar save_meal_entry (42501)';
+
+    -- =====================================================================
+    -- 10. Como A: celda con datos antiguos (positions 0 y 1) → nueva en 1025
+    -- =====================================================================
+    perform set_config('role', 'authenticated', true);
+    perform set_config('request.jwt.claims', v_claims_a, true);
+
+    -- Dos entradas "de antes de 008", insertadas directamente (owner_id por defecto: A)
+    insert into public.meal_entries (sheet_id, food_id, day_of_week, meal_slot, quantity, unit, position)
+    values
+      (v_sheet, v_food, 5::smallint, 'mid_morning', 1, null, 0),
+      (v_sheet, v_food, 5::smallint, 'mid_morning', 1, null, 1);
+
+    v_ret := public.save_meal_entry(
+      null, v_sheet, 5::smallint, 'mid_morning', v_food, null, 1, null);
+
+    select e.position into v_pos
+    from public.meal_entries e where e.id = v_ret and e.deleted_at is null;
+    if not found then
+      raise exception 'MEAL_CHECK_FAIL: 10. no se encuentra la entrada nueva en la celda con datos antiguos';
+    end if;
+    if v_pos is distinct from 1025 then
+      raise exception 'MEAL_CHECK_FAIL: 10. la entrada nueva quedó en position % (esperado 1025 = 1 + 1024)', v_pos;
+    end if;
+
+    -- Las filas antiguas no se renumeran
+    select count(*) into v_n from public.meal_entries
+    where sheet_id = v_sheet and day_of_week = 5 and meal_slot = 'mid_morning'
+      and deleted_at is null and position in (0, 1);
+    if v_n <> 2 then
+      raise exception 'MEAL_CHECK_FAIL: 10. las entradas antiguas cambiaron de position (quedan % en 0/1, esperadas 2)', v_n;
+    end if;
+    raise notice 'OK 10: en una celda con positions 0 y 1 la nueva va a 1025 sin renumerar las antiguas';
 
     -- Vuelta al rol privilegiado antes de terminar
     perform set_config('role', v_orig_role, true);

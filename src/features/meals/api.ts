@@ -6,8 +6,9 @@
 
 import { supabase } from '../../lib/supabase'
 import type { Database, Tables } from '../../lib/database.types'
-import type { MealSlot } from '../weekly-sheets/api'
+import { MEAL_SLOTS, type MealEntryWithFood, type MealSlot } from '../weekly-sheets/api'
 import { type SearchableFood, findExactMatch } from './normalize'
+import { planMove } from './position'
 
 export type Food = Tables<'foods'>
 
@@ -158,6 +159,120 @@ export async function softDeleteEntry(id: string): Promise<void> {
 export async function restoreEntry(id: string): Promise<void> {
   const { error } = await supabase.from('meal_entries').update({ deleted_at: null }).eq('id', id)
   check(error, 'recuperar la comida')
+}
+
+// ---------------------------------------------------------------------------
+// Mover comidas (spec 008)
+// ---------------------------------------------------------------------------
+
+/** Celda destino de un movimiento: día (1–7), momento y, opcional, antes de qué entrada. */
+export type MoveTarget = {
+  day: number
+  slot: MealSlot
+  /** Insertar antes de esta entrada; ausente (o no está en la celda) = al final. */
+  beforeId?: string
+}
+
+/** Lo necesario para deshacer un movimiento: celda y posición originales de la entrada. */
+export type MoveUndo = {
+  entryId: string
+  day: number
+  slot: MealSlot
+  position: number
+}
+
+const VALID_SLOTS: ReadonlySet<string> = new Set(MEAL_SLOTS.map(({ slot }) => slot))
+
+/** Valida la celda destino; lanza un Error en español si no es válida. */
+function validateCell(day: number, slot: string): void {
+  if (!Number.isInteger(day) || day < 1 || day > 7) {
+    throw new Error('El día tiene que estar entre lunes y domingo.')
+  }
+  if (!VALID_SLOTS.has(slot)) {
+    throw new Error('Elige un momento del día válido.')
+  }
+}
+
+/** Ordena como planMove: por posición y, a igualdad, por id. */
+function byPosition(a: { id: string; position: number }, b: { id: string; position: number }) {
+  return a.position - b.position || a.id.localeCompare(b.id)
+}
+
+/** Actualiza la celda y la posición de una entrada no borrada (nunca cantidad, unidad ni comida). */
+async function updatePlacement(
+  id: string,
+  day: number,
+  slot: MealSlot,
+  position: number,
+  action: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('meal_entries')
+    .update({ day_of_week: day, meal_slot: slot, position })
+    .eq('id', id)
+    .is('deleted_at', null)
+  check(error, action)
+}
+
+/**
+ * Mueve una comida apuntada a otra celda (o a otro sitio de la misma celda).
+ * `cellEntries` son las entradas actuales de la celda destino; si incluye la que
+ * se mueve, se ignora. Caso normal: un único update de la fila movida (punto
+ * medio entre sus vecinas). Si no queda hueco, se renumera la celda destino.
+ * Devuelve la celda y posición ORIGINALES para poder deshacer.
+ */
+export async function moveEntry(
+  entry: MealEntryWithFood,
+  target: MoveTarget,
+  cellEntries: readonly MealEntryWithFood[],
+): Promise<MoveUndo> {
+  validateCell(target.day, target.slot)
+
+  const undo: MoveUndo = {
+    entryId: entry.id,
+    day: entry.day_of_week,
+    slot: entry.meal_slot,
+    position: entry.position,
+  }
+
+  const others = cellEntries.filter((e) => e.id !== entry.id)
+  // beforeId que no está en la celda equivale a "al final" (igual que planMove).
+  const beforeId = others.some((e) => e.id === target.beforeId) ? target.beforeId : undefined
+
+  // Misma celda y mismo sitio relativo (o soltar sobre sí misma): no cambia nada.
+  const sameCell = entry.day_of_week === target.day && entry.meal_slot === target.slot
+  if (sameCell) {
+    if (target.beforeId === entry.id) return undo
+    const sorted = [...others, entry].sort(byPosition)
+    const nextId = sorted[sorted.indexOf(entry) + 1]?.id
+    if (nextId === beforeId) return undo
+  }
+
+  const plan = planMove({ cellEntries: others, movingId: entry.id, beforeId })
+  const action = 'mover la comida'
+
+  if ('renumber' in plan) {
+    // Sin hueco: primero se recolocan las demás entradas de la celda destino, una
+    // a una y en orden (una celda tiene pocas filas), y al final la que se mueve.
+    const renumbered = [...plan.renumber].filter(([id]) => id !== entry.id)
+    renumbered.sort((a, b) => a[1] - b[1])
+    for (const [id, position] of renumbered) {
+      await updatePlacement(id, target.day, target.slot, position, action)
+    }
+  }
+
+  await updatePlacement(entry.id, target.day, target.slot, plan.position, action)
+  return undo
+}
+
+/**
+ * Deshace el último movimiento: devuelve la entrada a su día, momento y posición
+ * originales con un único update. Si entre medias se renumeró la celda original,
+ * esa posición puede quedar en otro sitio relativo y el orden variar levemente;
+ * es aceptable para "deshacer el último movimiento".
+ */
+export async function undoMove(undo: MoveUndo): Promise<void> {
+  await updatePlacement(undo.entryId, undo.day, undo.slot, undo.position, 'deshacer el movimiento')
 }
 
 /** Marca o desmarca una comida del catálogo como favorita. */
