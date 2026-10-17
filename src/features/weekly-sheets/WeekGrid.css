@@ -168,6 +168,48 @@
   border-radius: var(--radius-full);
 }
 
+/*
+ * Celda de seguimiento interactiva (spec 009): el botón ocupa la celda entera
+ * (≥ 48 px de alto) para que se toque fácil aunque esté vacía. Mismo aspecto
+ * de texto subrayado que las comidas apuntadas.
+ */
+/* Doble clase: gana también al relleno de PC de la media query de abajo */
+.week-grid__cell.week-grid__cell--tracking {
+  padding: 0;
+}
+
+.week-grid__tracking-button {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: var(--touch-target-min);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  text-align: left;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  background-color: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+}
+
+.week-grid__tracking-button[aria-expanded='true'] {
+  font-weight: var(--font-weight-bold);
+}
+
+/* Contorno hacia dentro: la celda no tiene relleno y se cortaría por fuera */
+.week-grid__tracking-button:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: -3px;
+}
+
 /* Separa el "+" de la lista de comidas */
 .week-grid__entries + .week-grid__add-button {
   margin-top: var(--space-1);
@@ -239,6 +281,10 @@
   .week-grid__corner,
   .week-grid__row-label {
     width: 8rem;
+  }
+
+  .week-grid__tracking-button {
+    padding: var(--space-2);
   }
 
   .week-grid__panel-cell {

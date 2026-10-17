@@ -2,8 +2,15 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { restoreEntry } from '../meals/api'
 import { MealPanel, UndoBar } from '../meals/MealPanel'
-import { getOrCreateCurrentSheet, getSheet, type SheetDetail, updateMenuNumber } from './api'
-import { type ActiveCell, type MealCellTarget, WeekGrid } from './WeekGrid'
+import { TrackingPanel } from '../daily-tracking/TrackingPanel'
+import {
+  type DailyLog,
+  getOrCreateCurrentSheet,
+  getSheet,
+  type SheetDetail,
+  updateMenuNumber,
+} from './api'
+import { type ActiveCell, type MealCellTarget, type TrackingCellTarget, WeekGrid } from './WeekGrid'
 import { weekRangeLabel, weekTitle } from './week'
 import './WeeklySheetScreen.css'
 
@@ -168,14 +175,36 @@ type FocusTarget = { day: number; row: string; entryId?: string }
 /** Comida quitada que aún se puede recuperar con "Deshacer". */
 type Undo = { entryId: string; day: number; row: string }
 
+const isTrackingRow = (row: string) => row === 'water' || row === 'wc' || row === 'steps'
+
+/**
+ * Registros del día: los de la última carga, sustituidos por los guardados en
+ * este editor si son más recientes. Así, reabrir un día antes de que llegue la
+ * recarga no arranca el panel con valores viejos (que se volverían a guardar).
+ */
+function mergeLogs(loaded: DailyLog[], saved: Record<number, DailyLog>): DailyLog[] {
+  const byDay = new Map(loaded.map((log) => [log.day_of_week, log]))
+  for (const log of Object.values(saved)) {
+    const current = byDay.get(log.day_of_week)
+    if (!current || Date.parse(log.updated_at) >= Date.parse(current.updated_at)) {
+      byDay.set(log.day_of_week, log)
+    }
+  }
+  return [...byDay.values()]
+}
+
 /**
  * Tabla con edición: un solo panel abierto a la vez (activar otra celda lo
  * reemplaza), recarga tras guardar o quitar y barra "Comida quitada" con
- * Deshacer, integrada encima de la tabla.
+ * Deshacer, integrada encima de la tabla. Las filas de seguimiento abren el
+ * panel del día (TrackingPanel), que guarda solo y no se cierra al recargar.
  */
 function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
   const [active, setActive] = useState<ActiveCell | null>(null)
   const [undo, setUndo] = useState<Undo | null>(null)
+  // Último registro guardado de cada día en este editor (ver mergeLogs)
+  const [savedLogs, setSavedLogs] = useState<Record<number, DailyLog>>({})
+  const dailyLogs = mergeLogs(detail.dailyLogs, savedLogs)
   // Petición de foco; el objeto nuevo en cada petición hace que el efecto vuelva a correr
   const [focusRequest, setFocusRequest] = useState<FocusTarget | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
@@ -208,6 +237,23 @@ function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
     setActive(same ? null : { day: target.day, row: target.row, entryId })
   }
 
+  function handleTrackingActivate(target: TrackingCellTarget) {
+    if (active !== null && isTrackingRow(active.row) && active.day === target.day) {
+      // Mismo botón: lo cierra (aria-expanded). Otra fila de seguimiento del
+      // mismo día: el panel ya tiene los tres datos y se deja donde está;
+      // moverlo lo remontaría y podría arrancar sin el guardado aún en curso.
+      if (active.row === target.row) setActive(null)
+      return
+    }
+    setActive({ day: target.day, row: target.row })
+  }
+
+  function handleTrackingSaved(log: DailyLog) {
+    setSavedLogs((prev) => ({ ...prev, [log.day_of_week]: log }))
+    // Recarga en segundo plano: el panel sigue abierto (su key no cambia)
+    void onRefresh()
+  }
+
   function closePanel(focus: FocusTarget | null) {
     setActive(null)
     if (focus) setFocusRequest({ ...focus })
@@ -230,11 +276,22 @@ function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
 
   function renderPanel() {
     if (!active) return null
-    // 009 añadirá aquí el panel de las filas de seguimiento
-    if (active.row === 'water' || active.row === 'wc' || active.row === 'steps') return null
-    if (active.entryId && !editingEntry) return null
     const cell = active
-    const mealSlot = active.row
+    if (cell.row === 'water' || cell.row === 'wc' || cell.row === 'steps') {
+      // key por tabla y día: recargar no lo remonta (el log solo se lee al montar)
+      return (
+        <TrackingPanel
+          key={`${detail.sheet.id}-${cell.day}`}
+          sheetId={detail.sheet.id}
+          dayOfWeek={cell.day}
+          log={dailyLogs.find((log) => log.day_of_week === cell.day)}
+          onSaved={handleTrackingSaved}
+          onClose={() => closePanel({ day: cell.day, row: cell.row })}
+        />
+      )
+    }
+    if (cell.entryId && !editingEntry) return null
+    const mealSlot = cell.row
     return (
       <MealPanel
         key={`${cell.day}|${cell.row}|${cell.entryId ?? 'nueva'}`}
@@ -276,8 +333,9 @@ function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
         <WeekGrid
           monday={detail.sheet.start_date}
           meals={detail.meals}
-          dailyLogs={detail.dailyLogs}
+          dailyLogs={dailyLogs}
           onCellActivate={handleActivate}
+          onTrackingActivate={handleTrackingActivate}
           activeCell={active}
           renderPanel={renderPanel}
           // En móvil, cambiar de día cierra el panel: era del día anterior

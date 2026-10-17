@@ -1,0 +1,202 @@
+/*
+ * Panel integrado del seguimiento diario. Solo tokens de src/styles/tokens.css
+ * (paleta HARD). Mismo lenguaje que MealPanel: franja salvia decorativa, texto
+ * carbón sobre crema (AA), primario en terracota con texto grande y negrita
+ * (umbral 3:1) y el resto con contorno carbón.
+ */
+.tracking-panel {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-4);
+  background-color: var(--color-bg);
+  /* Franja salvia decorativa (sin texto encima) */
+  border-left: var(--space-2) solid var(--color-primary);
+  border-radius: var(--radius-md);
+}
+
+/* En PC el contenido no se estira a todo el ancho de la tabla */
+.tracking-panel__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  min-width: 0;
+  max-width: 40rem;
+}
+
+.tracking-panel__title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+
+.tracking-panel__title:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+/* Agua, pis y caca: apilados en móvil, en fila en PC si caben */
+.tracking-panel__counters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* Un dato: control, "Vaciar" y aviso */
+.tracking-panel__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.tracking-panel__label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.tracking-panel__input {
+  box-sizing: border-box;
+  width: 12rem;
+  max-width: 100%;
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-4);
+  font-family: inherit;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-md);
+}
+
+.tracking-panel__input:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+/* Con error: borde carbón más grueso y halo terracota decorativo */
+.tracking-panel__input[aria-invalid='true'] {
+  border-width: 3px;
+  box-shadow: 0 0 0 3px var(--color-accent);
+}
+
+/* Botón base: contorno carbón (secundario) */
+.tracking-panel__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  max-width: 100%;
+  padding: var(--space-2) var(--space-5);
+  font-family: inherit;
+  /* Siempre texto grande y en negrita (también vale sobre terracota) */
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+  text-align: center;
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+/* "Vaciar" y "Reintentar": más discretos */
+.tracking-panel__button--small {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-base);
+}
+
+/* Primario: fondo terracota, texto carbón grande y negrita */
+.tracking-panel__button--primary {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.tracking-panel__button:disabled {
+  cursor: not-allowed;
+  /* Sin bajar el contraste: se distingue por el borde discontinuo */
+  border-style: dashed;
+  border-color: var(--color-text);
+}
+
+.tracking-panel__button:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.tracking-panel__field-error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  border-left: var(--space-2) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+/* Aviso suave: franja salvia y fondo beige; vacío no ocupa sitio */
+.tracking-panel__warning:empty {
+  display: none;
+}
+
+.tracking-panel__warning p {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  border-left: var(--space-2) solid var(--color-primary);
+  border-radius: var(--radius-sm);
+}
+
+.tracking-panel__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+
+.tracking-panel__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.tracking-panel__status p {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+/* Error al guardar: el acento solo como franja */
+.tracking-panel__status--error {
+  padding: var(--space-2) var(--space-4);
+  border-left: var(--space-2) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}
+
+@media (min-width: 48rem) {
+  .tracking-panel {
+    padding: var(--space-5);
+  }
+
+  .tracking-panel__counters {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+}

@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MealEntryWithFood, SheetDetail, WeeklySheet } from './api'
+import type { DailyLog, MealEntryWithFood, SheetDetail, WeeklySheet } from './api'
 
 // El cliente real de Supabase exige variables de entorno: aquí no hace falta
 vi.mock('../../lib/supabase', () => ({ supabase: {} }))
@@ -30,6 +30,13 @@ vi.mock('../meals/api', async (importOriginal) => {
   }
 })
 
+// Panel de seguimiento: solo se simula el guardado (parse.ts y el resto, reales)
+vi.mock('../daily-tracking/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../daily-tracking/api')>()
+  return { ...actual, saveDailyLog: vi.fn() }
+})
+
+import { saveDailyLog } from '../daily-tracking/api'
 import { getFoodUsage, listFoods, restoreEntry, saveMealEntry, softDeleteEntry } from '../meals/api'
 import { getOrCreateCurrentSheet, getSheet, updateMenuNumber } from './api'
 import { WeeklySheetScreen } from './WeeklySheetScreen'
@@ -43,6 +50,7 @@ const mocked = {
   saveMealEntry: vi.mocked(saveMealEntry),
   softDeleteEntry: vi.mocked(softDeleteEntry),
   restoreEntry: vi.mocked(restoreEntry),
+  saveDailyLog: vi.mocked(saveDailyLog),
 }
 
 const SHEET = {
@@ -285,5 +293,133 @@ describe('WeeklySheetScreen · edición de comidas', () => {
     await waitFor(() =>
       expect(screen.queryByText(/No hemos podido actualizar la tabla/)).not.toBeInTheDocument(),
     )
+  })
+})
+
+describe('WeeklySheetScreen · seguimiento diario', () => {
+  function dailyLog(partial: Partial<DailyLog> = {}): DailyLog {
+    return {
+      id: 'log-2',
+      sheet_id: 'sheet-1',
+      owner_id: 'owner-1',
+      day_of_week: 2,
+      created_at: '2026-10-20T08:00:00Z',
+      updated_at: '2026-10-20T08:00:00Z',
+      deleted_at: null,
+      water_liters: null,
+      pee_count: null,
+      poop_count: null,
+      steps: null,
+      ...partial,
+    }
+  }
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  const PANEL = 'Seguimiento del martes'
+
+  beforeEach(() => {
+    Object.values(mocked).forEach((fn) => fn.mockReset())
+    mocked.getOrCreateCurrentSheet.mockResolvedValue(SHEET)
+    mocked.getSheet.mockResolvedValue({
+      ...DETAIL,
+      dailyLogs: [dailyLog({ water_liters: 1.5 })],
+    })
+    mocked.listFoods.mockResolvedValue([])
+    mocked.getFoodUsage.mockResolvedValue(new Map())
+    mocked.saveDailyLog.mockImplementation(async (_sheet, day, values) =>
+      dailyLog({ day_of_week: day, ...values, updated_at: '2026-10-21T10:00:00Z' }),
+    )
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 21, 12))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('tocar el agua del martes abre su panel en la tabla; Listo lo cierra y devuelve el foco', async () => {
+    renderAt('/')
+    const water = await screen.findByRole('button', { name: 'Editar agua: 1,5 L, martes' })
+    fireEvent.click(water)
+
+    const panel = await screen.findByRole('group', { name: PANEL })
+    const panelRow = panel.closest('tr')
+    expect(panel.closest('td')).toHaveAttribute('colspan', '8')
+    expect(panelRow?.previousElementSibling?.querySelector('th')).toHaveTextContent('Agua')
+    expect(water).toHaveAttribute('aria-expanded', 'true')
+    // Arranca con los datos del día
+    expect(within(panel).getByRole('textbox', { name: 'Agua' })).toHaveValue('1,5')
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Listo' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: PANEL })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByRole('button', { name: 'Editar agua: 1,5 L, martes' })).toHaveFocus()
+    // Sin cambios no se guarda nada
+    expect(mocked.saveDailyLog).not.toHaveBeenCalled()
+  })
+
+  it('tras guardar recarga en segundo plano sin cerrar ni remontar el panel', async () => {
+    renderAt('/')
+    fireEvent.click(await screen.findByRole('button', { name: 'Apuntar WC, martes' }))
+    const panel = await screen.findByRole('group', { name: PANEL })
+    expect(panel.closest('tr')?.previousElementSibling?.querySelector('th')).toHaveTextContent('WC')
+    const title = within(panel).getByRole('heading', { name: PANEL })
+
+    const reload = deferred<SheetDetail | null>()
+    mocked.getSheet.mockReturnValueOnce(reload.promise)
+    const pee = within(panel).getByRole('group', { name: 'Pis' })
+    fireEvent.click(within(pee).getByRole('button', { name: /^Añadir/ }))
+
+    // Guarda solo tras la espera y pide la recarga
+    await waitFor(() => expect(mocked.saveDailyLog).toHaveBeenCalledTimes(1), { timeout: 2000 })
+    expect(mocked.saveDailyLog).toHaveBeenCalledWith('sheet-1', 2, {
+      water_liters: 1.5,
+      pee_count: 1,
+      poop_count: null,
+      steps: null,
+    })
+    await waitFor(() => expect(mocked.getSheet).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText('Cargando tu semana…')).not.toBeInTheDocument()
+    // La celda ya muestra lo guardado, antes de que llegue la recarga
+    expect(
+      await screen.findByRole('button', { name: 'Editar WC: Pis 1, martes' }),
+    ).toBeInTheDocument()
+
+    reload.resolve({
+      ...DETAIL,
+      dailyLogs: [
+        dailyLog({ water_liters: 1.5, pee_count: 1, updated_at: '2026-10-21T10:00:00Z' }),
+      ],
+    })
+    await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('Guardado'))
+    // Mismo panel (no se ha remontado) y sigue abierto
+    expect(screen.getByRole('group', { name: PANEL })).toBe(panel)
+    expect(within(panel).getByRole('heading', { name: PANEL })).toBe(title)
+    expect(within(panel).getByRole('textbox', { name: 'Pis' })).toHaveValue('1')
+    expect(screen.queryByText('Cargando tu semana…')).not.toBeInTheDocument()
+  })
+
+  it('abrir una comida cierra el panel de seguimiento (uno solo a la vez)', async () => {
+    renderAt('/')
+    fireEvent.click(await screen.findByRole('button', { name: 'Apuntar pasos, martes' }))
+    expect(await screen.findByRole('group', { name: PANEL })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir comida, martes, cena' }))
+    expect(await screen.findByRole('group', { name: 'Cena · martes' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: PANEL })).not.toBeInTheDocument()
+    expect(document.querySelectorAll('td[colspan="8"]')).toHaveLength(1)
+
+    // Y al revés: abrir el seguimiento cierra la comida
+    fireEvent.click(screen.getByRole('button', { name: 'Apuntar agua, jueves' }))
+    expect(await screen.findByRole('group', { name: 'Seguimiento del jueves' })).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Cena · martes' })).not.toBeInTheDocument()
   })
 })

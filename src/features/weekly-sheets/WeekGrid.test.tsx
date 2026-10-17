@@ -203,7 +203,7 @@ describe('WeekGrid interactiva', () => {
     expect(onCellActivate).toHaveBeenLastCalledWith({ day: 2, row: 'breakfast' })
     expect(onCellActivate.mock.lastCall).toHaveLength(1)
 
-    // Las filas de seguimiento siguen siendo de solo lectura
+    // Sin onTrackingActivate, las filas de seguimiento son de solo lectura
     for (const row of ['water', 'wc', 'steps']) {
       expect(within(cell(2, row)).queryAllByRole('button')).toHaveLength(0)
     }
@@ -317,6 +317,96 @@ describe('WeekGrid interactiva', () => {
     fireEvent.click(screen.getByRole('button', { name: 'sábado 24 de octubre' }))
     expect(onDayChange).toHaveBeenCalledWith(6)
   })
+})
+
+describe('WeekGrid · seguimiento interactivo', () => {
+  const LOGS = [
+    log({ day_of_week: 2, water_liters: 1.5, pee_count: 4, poop_count: 1, steps: 8000 }),
+  ]
+
+  it('cada celda de seguimiento es un botón con nombre, también si está vacía', () => {
+    const onTrackingActivate = vi.fn()
+    render(
+      <WeekGrid
+        monday={MONDAY}
+        meals={[]}
+        dailyLogs={LOGS}
+        today="2026-01-01"
+        onTrackingActivate={onTrackingActivate}
+      />,
+    )
+    // 3 filas × 7 días
+    expect(
+      screen.getAllByRole('button', { name: /^(Apuntar|Editar) (agua|WC|pasos)/ }),
+    ).toHaveLength(21)
+    // Sin onCellActivate, las comidas siguen de solo lectura
+    expect(screen.queryAllByRole('button', { name: /^Añadir comida/ })).toHaveLength(0)
+
+    const water = screen.getByRole('button', { name: 'Editar agua: 1,5 L, martes' })
+    expect(water).toHaveTextContent('1,5 L')
+    expect(water).toHaveAttribute('aria-expanded', 'false')
+    expect(cell(2, 'water')).toContainElement(water)
+    expect(
+      screen.getByRole('button', { name: 'Editar WC: Pis 4 · Caca 1, martes' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Editar pasos: 8.000, martes' })).toBeInTheDocument()
+
+    // Vacío: no se ve texto (ni "0"), pero el botón tiene nombre
+    const empty = screen.getByRole('button', { name: 'Apuntar agua, miércoles' })
+    expect(empty).toBeEmptyDOMElement()
+    expect(screen.getByRole('button', { name: 'Apuntar WC, miércoles' })).toBeEmptyDOMElement()
+    expect(screen.getByRole('button', { name: 'Apuntar pasos, domingo' })).toBeEmptyDOMElement()
+
+    fireEvent.click(water)
+    expect(onTrackingActivate).toHaveBeenLastCalledWith({ day: 2, row: 'water' })
+    fireEvent.click(screen.getByRole('button', { name: 'Apuntar WC, jueves' }))
+    expect(onTrackingActivate).toHaveBeenLastCalledWith({ day: 4, row: 'wc' })
+    // Al activar, la tabla elige ese día (móvil)
+    expect(selectedDays()[0]).toContain('jueves')
+    fireEvent.click(screen.getByRole('button', { name: 'Apuntar pasos, viernes' }))
+    expect(onTrackingActivate).toHaveBeenLastCalledWith({ day: 5, row: 'steps' })
+  })
+
+  it.each([
+    ['water', 'Agua', 'Editar agua: 1,5 L, martes', 'WC'],
+    ['wc', 'WC', 'Editar WC: Pis 4 · Caca 1, martes', 'Pasos'],
+    ['steps', 'Pasos', 'Editar pasos: 8.000, martes', null],
+  ] as const)(
+    'con la celda de %s activa, la fila de panel va justo debajo y el botón se expande',
+    (row, label, buttonName, nextLabel) => {
+      render(
+        <WeekGrid
+          monday={MONDAY}
+          meals={[]}
+          dailyLogs={LOGS}
+          today="2026-01-01"
+          onTrackingActivate={() => {}}
+          activeCell={{ day: 2, row }}
+          renderPanel={() => <p>Panel de seguimiento</p>}
+        />,
+      )
+      const td = screen.getByText('Panel de seguimiento').closest('td')
+      expect(td).toHaveAttribute('colspan', '8')
+      const panelTr = td?.closest('tr')
+      expect(panelTr?.previousElementSibling?.querySelector('th')).toHaveTextContent(label)
+      if (nextLabel) {
+        expect(panelTr?.nextElementSibling?.querySelector('th')).toHaveTextContent(nextLabel)
+      } else {
+        expect(panelTr?.nextElementSibling).toBeNull()
+      }
+      expect(document.querySelectorAll('td[colspan]')).toHaveLength(1)
+
+      expect(cell(2, row)).toHaveClass('week-grid__cell--active')
+      expect(cell(3, row)).not.toHaveClass('week-grid__cell--active')
+      const button = screen.getByRole('button', { name: buttonName })
+      expect(button).toHaveAttribute('aria-expanded', 'true')
+      expect(button).toHaveAttribute('aria-controls', td?.id)
+      expect(screen.getByRole('button', { name: 'Apuntar agua, miércoles' })).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      )
+    },
+  )
 })
 
 describe('formatMealEntry', () => {

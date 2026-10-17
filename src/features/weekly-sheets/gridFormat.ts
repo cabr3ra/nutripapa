@@ -94,7 +94,7 @@ export function formatWc(log: DailyLog | undefined): string {
 }
 
 /** Pasos con separador de miles: "8.000". */
-export function formatSteps(log: DailyLog | undefined): string {
+export function formatSteps(log: Pick<DailyLog, 'steps'> | undefined): string {
   if (log?.steps == null) return ''
   return stepsFormat.format(log.steps)
 }

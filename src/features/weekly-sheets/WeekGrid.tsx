@@ -16,6 +16,12 @@
 // (activeCell.row puede ser un momento o 'water' | 'wc' | 'steps'), para que
 // la spec 009 lo reutilice en las filas de seguimiento.
 //
+// Seguimiento (spec 009): si llega onTrackingActivate, cada celda de Agua, WC
+// y Pasos es un botón que ocupa la celda entera y abre el panel del día. Va en
+// una prop aparte (y no ampliando onCellActivate) para que onCellActivate siga
+// recibiendo solo celdas de comida y quien solo edita comidas no tenga que
+// distinguir filas. Sin onTrackingActivate, esas filas son de solo lectura.
+//
 // Móvil y tira de días: solo se ven las celdas del día elegido, así que no se
 // puede activar otro día. Al activar una celda, la tabla elige ese día (por si
 // la ventana pasa de PC a móvil). Al cambiar de día con la tira se avisa con
@@ -38,7 +44,7 @@ import {
 } from './week'
 import './WeekGrid.css'
 
-/** Filas de seguimiento (solo lectura hasta la spec 009). */
+/** Filas de seguimiento (agua, WC y pasos). */
 export type TrackingRowKey = 'water' | 'wc' | 'steps'
 
 /** Cualquier fila de la tabla: un momento de comida o una fila de seguimiento. */
@@ -53,6 +59,9 @@ export type ActiveCell = { day: number; row: GridRowKey; entryId?: string }
 /** Celda de comida que se quiere editar o en la que se quiere añadir. */
 export type MealCellTarget = { day: number; row: MealSlot }
 
+/** Celda de seguimiento que se quiere apuntar o editar (abre el panel del día). */
+export type TrackingCellTarget = { day: number; row: TrackingRowKey }
+
 type WeekGridProps = {
   monday: IsoDate
   meals: MealEntryWithFood[]
@@ -65,6 +74,11 @@ type WeekGridProps = {
    * es de solo lectura.
    */
   onCellActivate?: (target: MealCellTarget, entryId?: string) => void
+  /**
+   * Si llega, cada celda de Agua, WC y Pasos es un botón que llama con su día
+   * y su fila. Sin ella, esas filas son de solo lectura.
+   */
+  onTrackingActivate?: (target: TrackingCellTarget) => void
   /** Celda con el panel abierto (resaltada); null o ausente si no hay panel. */
   activeCell?: ActiveCell | null
   /** Contenido de la fila de panel bajo la fila de activeCell (null: sin fila). */
@@ -73,12 +87,18 @@ type WeekGridProps = {
   onDayChange?: (day: DayOfWeek) => void
 }
 
-type TrackingRow = { key: TrackingRowKey; label: string; format: (log?: DailyLog) => string }
+type TrackingRow = {
+  key: TrackingRowKey
+  label: string
+  /** Nombre dentro de las etiquetas accesibles: "Apuntar agua, martes". */
+  spoken: string
+  format: (log?: DailyLog) => string
+}
 
 const TRACKING_ROWS: readonly TrackingRow[] = [
-  { key: 'water', label: 'Agua', format: formatWater },
-  { key: 'wc', label: 'WC', format: formatWc },
-  { key: 'steps', label: 'Pasos', format: formatSteps },
+  { key: 'water', label: 'Agua', spoken: 'agua', format: formatWater },
+  { key: 'wc', label: 'WC', spoken: 'WC', format: formatWc },
+  { key: 'steps', label: 'Pasos', spoken: 'pasos', format: formatSteps },
 ]
 
 /** Día por defecto en móvil: hoy si cae en la semana, si no el lunes. */
@@ -98,6 +118,7 @@ export function WeekGrid({
   dailyLogs,
   today = todayIso(),
   onCellActivate,
+  onTrackingActivate,
   activeCell = null,
   renderPanel,
   onDayChange,
@@ -137,6 +158,11 @@ export function WeekGrid({
     // "+" llama sin segundo argumento (añadir); una comida, con su id (editar)
     if (entryId === undefined) onCellActivate?.(target)
     else onCellActivate?.(target, entryId)
+  }
+
+  function activateTracking(target: TrackingCellTarget) {
+    setSelection({ monday, day: target.day as DayOfWeek })
+    onTrackingActivate?.(target)
   }
 
   // Contenido de la fila de panel (null o undefined: no hay fila)
@@ -266,7 +292,7 @@ export function WeekGrid({
               {panelRow(slot)}
             </Fragment>
           ))}
-          {TRACKING_ROWS.map(({ key, label, format }, rowIndex) => (
+          {TRACKING_ROWS.map(({ key, label, spoken, format }, rowIndex) => (
             <Fragment key={key}>
               <tr className={rowIndex === 0 ? 'week-grid__tracking--first' : undefined}>
                 <th scope="row" className="week-grid__row-label">
@@ -274,9 +300,33 @@ export function WeekGrid({
                 </th>
                 {days.map((date, i) => {
                   const day = (i + 1) as DayOfWeek
+                  const text = format(logsByDay.get(day))
+                  // Vacío se ve vacío (no "0"), pero el botón siempre tiene nombre
+                  const name = text
+                    ? `Editar ${spoken}: ${text}, ${dayName(day)}`
+                    : `Apuntar ${spoken}, ${dayName(day)}`
                   return (
-                    <td key={date} className={cellClass(day, key)} data-day={day} data-row={key}>
-                      {format(logsByDay.get(day))}
+                    <td
+                      key={date}
+                      className={`${cellClass(day, key)}${onTrackingActivate ? ' week-grid__cell--tracking' : ''}`}
+                      data-day={day}
+                      data-row={key}
+                    >
+                      {onTrackingActivate ? (
+                        <button
+                          type="button"
+                          className="week-grid__tracking-button"
+                          aria-label={name}
+                          data-day={day}
+                          data-row={key}
+                          {...expandedProps(day, key)}
+                          onClick={() => activateTracking({ day, row: key })}
+                        >
+                          {text}
+                        </button>
+                      ) : (
+                        text
+                      )}
                     </td>
                   )
                 })}
