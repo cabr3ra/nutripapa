@@ -29,6 +29,7 @@
 - Cloudflare Pages: sin `_redirects` ni `404.html` en la raíz (Pages sirve la SPA por defecto).
 - Auth: un único cliente en `src/lib/supabase.ts`; rutas con `react-router` envueltas en `RequireAuth`; `signOut({ scope: 'local' })`. Nunca probar `signUp` real contra producción: usar `pnpm check:signup`.
 - Datos: funciones en `src/features/<feature>/api.ts` (sin librería de fetching hasta 010); operaciones de varias filas como RPC `security invoker`. Fechas como `YYYY-MM-DD` locales, sin librería. Breakpoint móvil `48rem`.
+- UI: componentes compartidos en `src/components/`; los paneles de edición se abren como fila integrada bajo la fila tocada de la tabla (nunca modal, uno a la vez).
 - Detalle y motivos: `planning/architecture.md`.
 
 ## Style

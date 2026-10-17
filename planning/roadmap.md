@@ -11,9 +11,9 @@ table first; nothing else in this repo should be needed to get oriented.
 | 004 | access-code | done | 003 | — | 4 |
 | 005 | cloudflare-deploy | blocked | 001 | looping | 5 |
 | 006 | weekly-table | done | 004 | — | 6 |
-| 007 | meal-entry | todo | 006 | requirements | 7 |
+| 007 | meal-entry | todo | 006 | tasks_ready | 7 |
 | 008 | drag-and-drop | todo | 007 | requirements | 8 |
-| 009 | daily-tracking | todo | 006 | requirements | 9 |
+| 009 | daily-tracking | todo | 006 | tasks_ready | 9 |
 | 010 | offline-sync | todo | 007, 009 | requirements | 10 |
 | 011 | pdf-export | todo | 006, 009 | requirements | 11 |
 | 012 | weight-tracking | todo | 009 | requirements | 12 |

@@ -38,6 +38,9 @@ PWA estática (React SPA) servida por Cloudflare Pages. Habla directamente con S
 | Operaciones de varias filas | Funciones Postgres `security invoker`, `search_path = ''`, `execute` solo `authenticated`, llamadas con `rpc` | Atómicas y sujetas a RLS (006) |
 | Fechas | Texto `YYYY-MM-DD` en hora local, aritmética de días, `Intl` para textos; sin librería | Sin desfases por zona/cambio de hora (006) |
 | Breakpoint móvil | `48rem`: por debajo un día + tira de días; por encima 7 columnas | Diseño de 006 |
+| Componentes compartidos | `src/components/` (p.ej. `Stepper`, `UnitPicker`) | Reutilizados por varias features (007, 009) |
+| Paneles de edición | Fila integrada en la tabla, justo bajo la fila tocada, a todo el ancho (móvil y PC); uno abierto a la vez | Sin modales (HARD) y sin estrechar la tabla de 7 columnas (007) |
+| Guardado del seguimiento diario | Automático tras 600 ms sin cambios, `upsert` por `(sheet_id, day_of_week)` | Menos toques para el padre (009) |
 | Comprobar registro desactivado | `GET /auth/v1/settings` → `disable_signup: true` (`pnpm check:signup`) | Verificar sin crear usuarios en producción (004) |
 
 ### Data model
