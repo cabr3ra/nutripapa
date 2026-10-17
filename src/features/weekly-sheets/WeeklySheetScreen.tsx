@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useParams } from 'react-router'
+import { restoreEntry } from '../meals/api'
+import { MealPanel, UndoBar } from '../meals/MealPanel'
 import { getOrCreateCurrentSheet, getSheet, type SheetDetail, updateMenuNumber } from './api'
-import { WeekGrid } from './WeekGrid'
+import { type ActiveCell, type MealCellTarget, WeekGrid } from './WeekGrid'
 import { weekRangeLabel, weekTitle } from './week'
 import './WeeklySheetScreen.css'
 
 const LOAD_ERROR = 'No hemos podido cargar tu semana. Revisa la conexión y prueba otra vez.'
 const INVALID_MENU = 'Escribe un número a partir de 1'
 const SAVE_ERROR = 'No hemos podido guardar el número de menú. Prueba otra vez.'
+const REFRESH_ERROR = 'No hemos podido actualizar la tabla. Revisa la conexión y prueba otra vez.'
 const SAVED_VISIBLE_MS = 2500
 
 // Resultado de una carga, ligado a la clave (tabla + intento) que lo pidió:
@@ -26,13 +29,22 @@ async function loadDetail(sheetId: string | undefined): Promise<SheetDetail | nu
 /**
  * Pantalla de una tabla semanal. En `/` abre (o crea) la tabla de esta semana;
  * en `/tabla/:sheetId`, una tabla concreta. Cabecera con semana, rango y
- * nº de menú editable en línea; debajo, la cuadrícula de solo lectura.
+ * nº de menú editable en línea; debajo, la cuadrícula con las celdas de comida
+ * editables (panel integrado bajo la fila tocada).
+ *
+ * Dos formas de cargar: la carga completa (clave tabla#intento, con
+ * "Cargando tu semana…") y la recarga en segundo plano tras guardar o quitar,
+ * que mantiene la tabla visible y solo cambia los datos cuando llegan.
  */
 export function WeeklySheetScreen() {
   const { sheetId } = useParams()
   const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState<LoadResult | null>(null)
   const key = `${sheetId ?? 'current'}#${attempt}`
+  // Recargas en segundo plano: solo cuenta la última pedida
+  const refreshSeq = useRef(0)
+  // Clave de la carga cuya recarga falló (el aviso se olvida al cambiar de clave)
+  const [refreshFailedKey, setRefreshFailedKey] = useState<string | null>(null)
 
   // El estado solo se toca cuando llega la respuesta (con flag de cancelación)
   useEffect(() => {
@@ -54,6 +66,28 @@ export function WeeklySheetScreen() {
   const current = result?.key === key ? result : null
   const sheet = current?.status === 'ready' ? current.detail.sheet : null
   const title = sheet ? weekTitle(sheet.start_date) : ''
+
+  /** Recarga la tabla ya cargada sin quitarla de la pantalla. Nunca lanza. */
+  async function refresh(): Promise<void> {
+    if (current?.status !== 'ready') return
+    const loadedKey = current.key
+    const id = current.detail.sheet.id
+    const seq = ++refreshSeq.current
+    try {
+      const detail = await getSheet(id)
+      if (seq !== refreshSeq.current) return
+      setRefreshFailedKey(null)
+      // Si entretanto se cargó otra tabla (otra clave), se descarta
+      setResult((prev) => {
+        if (prev?.key !== loadedKey) return prev
+        return detail
+          ? { key: loadedKey, status: 'ready', detail }
+          : { key: loadedKey, status: 'not-found' }
+      })
+    } catch {
+      if (seq === refreshSeq.current) setRefreshFailedKey(loadedKey)
+    }
+  }
 
   return (
     <main className="sheet-screen">
@@ -107,14 +141,150 @@ export function WeeklySheetScreen() {
         )}
 
         {current?.status === 'ready' && (
-          <WeekGrid
-            monday={current.detail.sheet.start_date}
-            meals={current.detail.meals}
-            dailyLogs={current.detail.dailyLogs}
+          // key: al cambiar de tabla, el panel y la barra de deshacer empiezan de cero
+          <SheetEditor
+            key={current.detail.sheet.id}
+            detail={current.detail}
+            onRefresh={refresh}
+            refreshFailed={refreshFailedKey === key}
           />
         )}
       </div>
     </main>
+  )
+}
+
+type SheetEditorProps = {
+  detail: SheetDetail
+  /** Recarga en segundo plano (nunca lanza). */
+  onRefresh: () => Promise<void>
+  /** La última recarga en segundo plano falló. */
+  refreshFailed: boolean
+}
+
+/** Botón de la tabla al que vuelve el foco: el de una comida o el "+" de la celda. */
+type FocusTarget = { day: number; row: string; entryId?: string }
+
+/** Comida quitada que aún se puede recuperar con "Deshacer". */
+type Undo = { entryId: string; day: number; row: string }
+
+/**
+ * Tabla con edición: un solo panel abierto a la vez (activar otra celda lo
+ * reemplaza), recarga tras guardar o quitar y barra "Comida quitada" con
+ * Deshacer, integrada encima de la tabla.
+ */
+function SheetEditor({ detail, onRefresh, refreshFailed }: SheetEditorProps) {
+  const [active, setActive] = useState<ActiveCell | null>(null)
+  const [undo, setUndo] = useState<Undo | null>(null)
+  // Petición de foco; el objeto nuevo en cada petición hace que el efecto vuelva a correr
+  const [focusRequest, setFocusRequest] = useState<FocusTarget | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+
+  // Devuelve el foco al botón pedido cuando el panel ya se ha cerrado. Si la
+  // comida ya no está (p. ej. se acaba de quitar), va al "+" de esa celda.
+  useEffect(() => {
+    const root = gridRef.current
+    if (!focusRequest || !root) return
+    const cell = `button[data-day="${focusRequest.day}"][data-row="${focusRequest.row}"]`
+    const entryButton = focusRequest.entryId
+      ? root.querySelector<HTMLElement>(`${cell}[data-entry-id="${focusRequest.entryId}"]`)
+      : null
+    const target = entryButton ?? root.querySelector<HTMLElement>(`${cell}:not([data-entry-id])`)
+    target?.focus()
+  }, [focusRequest])
+
+  // Comida que se edita; si ya no existe (recarga), no se pinta el panel
+  const editingEntry = active?.entryId
+    ? detail.meals.find((meal) => meal.id === active.entryId)
+    : undefined
+
+  function handleActivate(target: MealCellTarget, entryId?: string) {
+    const same =
+      active !== null &&
+      active.day === target.day &&
+      active.row === target.row &&
+      active.entryId === entryId
+    // Volver a tocar el botón que abrió el panel lo cierra (aria-expanded)
+    setActive(same ? null : { day: target.day, row: target.row, entryId })
+  }
+
+  function closePanel(focus: FocusTarget | null) {
+    setActive(null)
+    if (focus) setFocusRequest({ ...focus })
+  }
+
+  function handleRemoved(cell: ActiveCell, entryId: string) {
+    // La barra nueva sustituye a la anterior (key distinta)
+    setUndo({ entryId, day: cell.day, row: cell.row })
+    closePanel({ day: cell.day, row: cell.row })
+    void onRefresh()
+  }
+
+  async function handleUndo(item: Undo) {
+    // Si falla, lanza y la barra lo avisa en línea
+    await restoreEntry(item.entryId)
+    setUndo(null)
+    setFocusRequest({ day: item.day, row: item.row })
+    await onRefresh()
+  }
+
+  function renderPanel() {
+    if (!active) return null
+    // 009 añadirá aquí el panel de las filas de seguimiento
+    if (active.row === 'water' || active.row === 'wc' || active.row === 'steps') return null
+    if (active.entryId && !editingEntry) return null
+    const cell = active
+    const mealSlot = active.row
+    return (
+      <MealPanel
+        key={`${cell.day}|${cell.row}|${cell.entryId ?? 'nueva'}`}
+        sheetId={detail.sheet.id}
+        dayOfWeek={cell.day}
+        mealSlot={mealSlot}
+        entry={editingEntry}
+        onSaved={() => {
+          closePanel(cell)
+          void onRefresh()
+        }}
+        onClose={() => closePanel(cell)}
+        onRemoved={(entryId) => handleRemoved(cell, entryId)}
+      />
+    )
+  }
+
+  return (
+    <div className="sheet-screen__editor">
+      {refreshFailed && (
+        <div className="sheet-screen__message" role="alert">
+          <p>{REFRESH_ERROR}</p>
+          <button className="sheet-screen__button" type="button" onClick={() => void onRefresh()}>
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {undo && (
+        <UndoBar
+          key={undo.entryId}
+          message="Comida quitada"
+          onUndo={() => handleUndo(undo)}
+          onClose={() => setUndo(null)}
+        />
+      )}
+
+      <div ref={gridRef}>
+        <WeekGrid
+          monday={detail.sheet.start_date}
+          meals={detail.meals}
+          dailyLogs={detail.dailyLogs}
+          onCellActivate={handleActivate}
+          activeCell={active}
+          renderPanel={renderPanel}
+          // En móvil, cambiar de día cierra el panel: era del día anterior
+          onDayChange={() => setActive(null)}
+        />
+      </div>
+    </div>
   )
 }
 

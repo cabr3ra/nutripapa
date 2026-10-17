@@ -265,6 +265,19 @@ export type Database = {
         Args: { source_id: string; target_start: string }
         Returns: string
       }
+      save_meal_entry: {
+        Args: {
+          p_day_of_week: number
+          p_entry_id: string
+          p_food_id: string
+          p_food_name: string
+          p_meal_slot: string
+          p_quantity: number
+          p_sheet_id: string
+          p_unit: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

@@ -1,0 +1,133 @@
+/*
+ * Campo de comida con sugerencias. Solo tokens de src/styles/tokens.css (paleta HARD).
+ * Texto siempre en --color-text sobre crema o beige (AA).
+ * La lista va en el flujo del panel, bajo el campo: no flota sobre otros controles.
+ * Opción activa: fondo beige + borde izquierdo grueso salvia + texto en negrita
+ * (no se indica solo con color).
+ */
+.food-combobox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.food-combobox__label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.food-combobox__input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-4);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-md);
+}
+
+.food-combobox__input:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.food-combobox__listbox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-2) 0;
+  list-style: none;
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-md);
+}
+
+.food-combobox__listbox[hidden] {
+  display: none;
+}
+
+.food-combobox__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.food-combobox__group-title {
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.food-combobox__group-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.food-combobox__option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  box-sizing: border-box;
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  /* Borde reservado para que la opción activa no mueva el texto */
+  border-left: 6px solid transparent;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.food-combobox__option:hover {
+  background-color: var(--color-surface);
+}
+
+.food-combobox__option--active {
+  font-weight: var(--font-weight-bold);
+  background-color: var(--color-surface);
+  border-left-color: var(--color-primary);
+}
+
+.food-combobox__option--new {
+  font-style: italic;
+}
+
+.food-combobox__name {
+  min-width: 0;
+}
+
+.food-combobox__star {
+  margin-right: var(--space-2);
+  color: var(--color-text);
+}
+
+.food-combobox__amount {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text);
+}
+
+/* Oculto a la vista, disponible para lectores de pantalla */
+.food-combobox__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

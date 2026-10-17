@@ -1,0 +1,101 @@
+/*
+ * Stepper "− [ n ] +". Solo tokens de src/styles/tokens.css (paleta HARD).
+ * Botones de contorno carbón de 48 px; foco con contorno carbón de 3 px.
+ */
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.stepper__label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.stepper__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.stepper__button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  padding: 0;
+  font-family: inherit;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+}
+
+.stepper__button:disabled {
+  cursor: not-allowed;
+  /* Sin bajar el contraste: se distingue por el borde discontinuo */
+  border-style: dashed;
+}
+
+.stepper__button:focus-visible,
+.stepper__input:focus-visible {
+  outline: 3px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.stepper__field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.stepper__input {
+  box-sizing: border-box;
+  width: 6rem;
+  min-width: 0;
+  min-height: var(--touch-target-min);
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border: 2px solid var(--color-text);
+  border-radius: var(--radius-md);
+}
+
+/* Con error: borde carbón más grueso y halo terracota decorativo */
+.stepper__input[aria-invalid='true'] {
+  border-width: 3px;
+  box-shadow: 0 0 0 3px var(--color-accent);
+}
+
+.stepper__suffix {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+/* Mensaje en línea: el acento solo como franja */
+.stepper__message {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  border-left: var(--space-2) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+}

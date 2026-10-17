@@ -132,6 +132,14 @@
   color: var(--color-text);
 }
 
+/* Avisos (recarga, "Comida quitada") encima de la tabla, dentro del flujo */
+.sheet-screen__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
 .sheet-screen__status {
   margin: 0;
   font-size: var(--font-size-base);

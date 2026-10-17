@@ -163,6 +163,162 @@ describe('WeekGrid', () => {
   })
 })
 
+describe('WeekGrid interactiva', () => {
+  const MEALS = [
+    meal({
+      id: 'e1',
+      day_of_week: 2,
+      meal_slot: 'breakfast',
+      food_name: 'Tostadas',
+      quantity: 2,
+      unit: 'unidades',
+    }),
+  ]
+
+  it('cada celda de comida tiene "+" y cada comida apuntada es un botón de editar', () => {
+    const onCellActivate = vi.fn()
+    render(
+      <WeekGrid
+        monday={MONDAY}
+        meals={MEALS}
+        dailyLogs={[]}
+        today="2026-01-01"
+        onCellActivate={onCellActivate}
+      />,
+    )
+    // 5 momentos × 7 días
+    expect(screen.getAllByRole('button', { name: /^Añadir comida, / })).toHaveLength(35)
+    const add = screen.getByRole('button', { name: 'Añadir comida, martes, media mañana' })
+    expect(add).toHaveAttribute('aria-expanded', 'false')
+
+    const edit = screen.getByRole('button', {
+      name: 'Editar Tostadas · 2 unidades, martes, desayuno',
+    })
+    expect(edit).toHaveTextContent('Tostadas · 2 unidades')
+    expect(cell(2, 'breakfast')).toContainElement(edit)
+
+    fireEvent.click(edit)
+    expect(onCellActivate).toHaveBeenLastCalledWith({ day: 2, row: 'breakfast' }, 'e1')
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir comida, martes, desayuno' }))
+    expect(onCellActivate).toHaveBeenLastCalledWith({ day: 2, row: 'breakfast' })
+    expect(onCellActivate.mock.lastCall).toHaveLength(1)
+
+    // Las filas de seguimiento siguen siendo de solo lectura
+    for (const row of ['water', 'wc', 'steps']) {
+      expect(within(cell(2, row)).queryAllByRole('button')).toHaveLength(0)
+    }
+  })
+
+  it('inserta la fila de panel justo después de la fila activa, con colSpan 8', () => {
+    render(
+      <WeekGrid
+        monday={MONDAY}
+        meals={MEALS}
+        dailyLogs={[]}
+        today="2026-01-01"
+        onCellActivate={() => {}}
+        activeCell={{ day: 2, row: 'lunch' }}
+        renderPanel={() => <p>Contenido del panel</p>}
+      />,
+    )
+    const content = screen.getByText('Contenido del panel')
+    const td = content.closest('td')
+    expect(td).toHaveAttribute('colspan', '8')
+    const panelTr = td?.closest('tr')
+    expect(panelTr?.children).toHaveLength(1)
+    // La fila anterior es la de "Comida"
+    const previous = panelTr?.previousElementSibling
+    expect(previous?.querySelector('th')).toHaveTextContent('Comida')
+    expect(panelTr?.nextElementSibling?.querySelector('th')).toHaveTextContent('Media tarde')
+
+    // Celda resaltada y botón que lo abrió expandido, apuntando al panel
+    expect(cell(2, 'lunch')).toHaveClass('week-grid__cell--active')
+    expect(cell(3, 'lunch')).not.toHaveClass('week-grid__cell--active')
+    const add = screen.getByRole('button', { name: 'Añadir comida, martes, comida' })
+    expect(add).toHaveAttribute('aria-expanded', 'true')
+    expect(add).toHaveAttribute('aria-controls', td?.id)
+    expect(
+      screen.getByRole('button', { name: 'Editar Tostadas · 2 unidades, martes, desayuno' }),
+    ).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('al editar, se expande el botón de esa comida, no el "+"', () => {
+    render(
+      <WeekGrid
+        monday={MONDAY}
+        meals={MEALS}
+        dailyLogs={[]}
+        today="2026-01-01"
+        onCellActivate={() => {}}
+        activeCell={{ day: 2, row: 'breakfast', entryId: 'e1' }}
+        renderPanel={() => <p>Panel</p>}
+      />,
+    )
+    expect(
+      screen.getByRole('button', { name: 'Editar Tostadas · 2 unidades, martes, desayuno' }),
+    ).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Añadir comida, martes, desayuno' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
+
+  it('el mecanismo de fila de panel también sirve para las filas de seguimiento', () => {
+    render(
+      <WeekGrid
+        monday={MONDAY}
+        meals={[]}
+        dailyLogs={[]}
+        today="2026-01-01"
+        activeCell={{ day: 4, row: 'wc' }}
+        renderPanel={() => <p>Seguimiento</p>}
+      />,
+    )
+    const panelTr = screen.getByText('Seguimiento').closest('tr')
+    expect(panelTr?.previousElementSibling?.querySelector('th')).toHaveTextContent('WC')
+    expect(cell(4, 'wc')).toHaveClass('week-grid__cell--active')
+  })
+
+  it('sin renderPanel o si devuelve null no hay fila de panel', () => {
+    render(
+      <WeekGrid
+        monday={MONDAY}
+        meals={[]}
+        dailyLogs={[]}
+        today="2026-01-01"
+        onCellActivate={() => {}}
+        activeCell={{ day: 2, row: 'lunch' }}
+        renderPanel={() => null}
+      />,
+    )
+    expect(document.querySelector('td[colspan]')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Añadir comida, martes, comida' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
+
+  it('al activar una celda elige ese día y al cambiar de día avisa con onDayChange', () => {
+    const onDayChange = vi.fn()
+    render(
+      <WeekGrid
+        monday={MONDAY}
+        meals={[]}
+        dailyLogs={[]}
+        today="2026-01-01"
+        onCellActivate={() => {}}
+        onDayChange={onDayChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir comida, jueves, cena' }))
+    expect(selectedDays()[0]).toContain('jueves')
+    expect(onDayChange).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'sábado 24 de octubre' }))
+    expect(onDayChange).toHaveBeenCalledWith(6)
+  })
+})
+
 describe('formatMealEntry', () => {
   it('muestra lo que haya si falta cantidad o unidad', () => {
     expect(formatMealEntry({ food_name: 'Pan', quantity: 2, unit: null })).toBe('Pan · 2')
